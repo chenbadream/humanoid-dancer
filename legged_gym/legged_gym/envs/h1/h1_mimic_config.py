@@ -1,7 +1,48 @@
 from dataclasses import dataclass, field
+from typing import Optional, Dict, List, Union
 
 from legged_gym.envs.h1 import h1_config
 from legged_gym.envs.base import legged_robot_config
+
+@dataclass
+class VisaulizeConfig:
+    customize_color: bool = True
+    marker_joint_colors: List[List[float]] = field(default_factory=lambda: [
+        [0.157, 0.231, 0.361], # pelvis
+        [0.157, 0.231, 0.361], # left_hip_yaw_joint
+        [0.157, 0.231, 0.361], # left_hip_roll_joint
+        [0.157, 0.231, 0.361], # left_hip_pitch_joint
+        [0.157, 0.231, 0.361], # left_knee_joint
+        [0.157, 0.231, 0.361], # left_ankle_joint
+        [0.157, 0.231, 0.361], # right_hip_yaw_joint
+        [0.157, 0.231, 0.361], # right_hip_roll_joint
+        [0.157, 0.231, 0.361], # right_hip_pitch_joint
+        [0.157, 0.231, 0.361], # right_knee_joint
+        [0.157, 0.231, 0.361], # right_ankle_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+    ])
+    
+@dataclass
+class Motion:
+    motion_file: str = 'resources/motions/h1/stable_punch.pkl'
+    skeleton_file: str = 'resources/robots/h1/xml/h1.xml'
+    
+    dt: Optional[float] = None
+    
+    sync: bool = False
+    
+    test_keys: Optional[List[str]] = None
+    visualize_config: VisaulizeConfig = field(default_factory=VisaulizeConfig)
 
 @dataclass
 class H1MimicCfg:
@@ -17,6 +58,8 @@ class H1MimicCfg:
     noise: legged_robot_config.Noise = field(default_factory=legged_robot_config.Noise)
     viewer: legged_robot_config.Viewer = field(default_factory=legged_robot_config.Viewer)
     sim: legged_robot_config.Sim = field(default_factory=legged_robot_config.Sim)
+    
+    motion: Motion = field(default_factory=Motion)
     
     seed: int = field(init=False)
     name = 'h1_mimic'

@@ -56,48 +56,40 @@ class HumanoidRobot(LeggedRobot):
 
         self._cam_prev_char_pos[:] = char_root_pos
         return
+    
+    def handle_viewer_action_event(self, evt):
+        super().handle_viewer_action_event(evt)
+        if evt.action == "reset" and evt.value > 0:
+            self.reset()
+        elif evt.action == "follow" and evt.value > 0:
+            self.follow = not self.follow
+        elif evt.action == "print_cam" and evt.value > 0:
+            cam_trans = self.gym.get_viewer_camera_transform(self.viewer, None)
+            cam_pos = np.array([cam_trans.p.x, cam_trans.p.y, cam_trans.p.z])
+            # print("Print camera", cam_pos)
+            logger.info(f"Print camera {cam_pos}")
+        elif evt.action == "show_traj" and evt.value > 0:
+            self.show_traj = not self.show_traj
+            logger.info(f"show_traj: {self.show_traj}")
+        elif evt.action == "apply_force" and evt.value > 0:
+            forces = torch.zeros((1, self.rigid_body_states.shape[0], 3), device=self.device, dtype=torch.float)
+            torques = torch.zeros((1, self.rigid_body_states.shape[0], 3), device=self.device, dtype=torch.float)
+            for i in range(self.rigid_body_states.shape[0] // self.num_bodies):
+                forces[:, i * self.num_bodies + 3, :] = -3500
+                forces[:, i * self.num_bodies + 7, :] = -3500
+            self.gym.apply_rigid_body_force_tensors(self.sim, gymtorch.unwrap_tensor(forces), gymtorch.unwrap_tensor(torques), gymapi.ENV_SPACE)
+            
+        elif evt.action == "prev_env" and evt.value > 0:
+            self.viewing_env_idx = (self.viewing_env_idx - 1) % self.num_envs
+            logger.info(f"\nShowing env: {self.viewing_env_idx}")
+        elif evt.action == "next_env" and evt.value > 0:
+            self.viewing_env_idx = (self.viewing_env_idx + 1) % self.num_envs
+            logger.info(f"\nShowing env: {self.viewing_env_idx}")
             
     def render(self, sync_frame_time=True):
         if self.viewer:
             self._update_camera()
-        
-        if self.viewer:
-            # check for keyboard events
-            for evt in self.gym.query_viewer_action_events(self.viewer):
-                # elif evt.action == "toggle_video_record" and evt.value > 0:
-                #     self.recording = not self.recording
-                #     self.recording_state_change = True
-                # elif evt.action == "cancel_video_record" and evt.value > 0:
-                #     self.recording = False
-                #     self.recording_state_change = False
-                #     self._video_queue = deque(maxlen=self.max_video_queue_size)
-                #     self._clear_recorded_states()
-                if evt.action == "reset" and evt.value > 0:
-                    self.reset()
-                elif evt.action == "follow" and evt.value > 0:
-                    self.follow = not self.follow
-                elif evt.action == "print_cam" and evt.value > 0:
-                    cam_trans = self.gym.get_viewer_camera_transform(self.viewer, None)
-                    cam_pos = np.array([cam_trans.p.x, cam_trans.p.y, cam_trans.p.z])
-                    # print("Print camera", cam_pos)
-                    logger.info(f"Print camera {cam_pos}")
-                elif evt.action == "show_traj" and evt.value > 0:
-                    self.show_traj = not self.show_traj
-                    logger.info(f"show_traj: {self.show_traj}")
-                elif evt.action == "apply_force" and evt.value > 0:
-                    forces = torch.zeros((1, self.rigid_body_states.shape[0], 3), device=self.device, dtype=torch.float)
-                    torques = torch.zeros((1, self.rigid_body_states.shape[0], 3), device=self.device, dtype=torch.float)
-                    for i in range(self.rigid_body_states.shape[0] // self.num_bodies):
-                        forces[:, i * self.num_bodies + 3, :] = -3500
-                        forces[:, i * self.num_bodies + 7, :] = -3500
-                    self.gym.apply_rigid_body_force_tensors(self.sim, gymtorch.unwrap_tensor(forces), gymtorch.unwrap_tensor(torques), gymapi.ENV_SPACE)
-                    
-                elif evt.action == "prev_env" and evt.value > 0:
-                    self.viewing_env_idx = (self.viewing_env_idx - 1) % self.num_envs
-                    logger.info(f"\nShowing env: {self.viewing_env_idx}")
-                elif evt.action == "next_env" and evt.value > 0:
-                    self.viewing_env_idx = (self.viewing_env_idx + 1) % self.num_envs
-                    logger.info(f"\nShowing env: {self.viewing_env_idx}")
+
         super().render(sync_frame_time)
     
     def _create_envs(self):
@@ -207,4 +199,49 @@ class HumanoidRobot(LeggedRobot):
             self.waist_pitch_joint_indices[i] = self.gym.find_actor_dof_handle(self.envs[0], self.actor_handles[0], waist_pitch_names[i])
         logger.info(f"waist_pitch_joint_indices: {self.waist_pitch_joint_indices}; waist_pitch_names: {waist_pitch_names}")
         
+    def _set_env_state(
+        self,
+        env_ids,
+        root_pos,
+        root_rot,
+        dof_pos,
+        root_vel,
+        root_ang_vel,
+        dof_vel,
+        rigid_body_pos=None,
+        rigid_body_rot=None,
+        rigid_body_vel=None,
+        rigid_body_ang_vel=None,
+    ):
+        self.root_states[env_ids, 0:3] = root_pos
+        self.root_states[env_ids, 3:7] = root_rot
+        self.root_states[env_ids, 7:10] = root_vel
+        self.root_states[env_ids, 10:13] = root_ang_vel
         
+        self.dof_pos[env_ids] = dof_pos
+        self.dof_vel[env_ids] = dof_vel
+
+        if (not rigid_body_pos is None) and (not rigid_body_rot is None):
+            # self._rigid_body_pos[env_ids] = rigid_body_pos
+            # self._rigid_body_rot[env_ids] = rigid_body_rot
+            # self._rigid_body_vel[env_ids] = rigid_body_vel
+            # self._rigid_body_ang_vel[env_ids] = rigid_body_ang_vel
+
+            # self._reset_rb_pos = self._rigid_body_pos[env_ids].clone()
+            # self._reset_rb_rot = self._rigid_body_rot[env_ids].clone()
+            # self._reset_rb_vel = self._rigid_body_vel[env_ids].clone()
+            # self._reset_rb_ang_vel = self._rigid_body_ang_vel[env_ids].clone()
+            pass
+        
+    def _reset_env_tensors(self, env_ids):
+        env_ids_int32 = env_ids.to(dtype=torch.int32, device=self.device)
+
+        self.gym.set_actor_root_state_tensor_indexed(self.sim, gymtorch.unwrap_tensor(self.root_states), gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+        self.gym.set_dof_state_tensor_indexed(self.sim, gymtorch.unwrap_tensor(self.dof_state), gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+
+        # self.progress_buf[env_ids] = 0
+        self.reset_buf[env_ids] = 0
+        # self._terminate_buf[env_ids] = 0
+        # self._contact_forces[env_ids] = 0
+
+        return

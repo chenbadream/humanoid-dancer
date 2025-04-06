@@ -161,6 +161,7 @@ class Viewer:
     ref_env: int = 0
     pos: List[float] = field(default_factory=lambda: [10, 0, 6])
     lookat: List[float] = field(default_factory=lambda: [11.0, 5, 3.0])
+    debug_viz: bool = False
 
 @dataclass
 class Sim:

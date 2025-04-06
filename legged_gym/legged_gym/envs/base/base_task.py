@@ -87,6 +87,13 @@ class BaseTask():
 
     def step(self, actions):
         raise NotImplementedError
+    
+    def handle_viewer_action_event(self, evt):
+        if evt.action == "QUIT" and evt.value > 0:
+            sys.exit()
+        elif evt.action == "toggle_viewer_sync" and evt.value > 0:
+            self.enable_viewer_sync = not self.enable_viewer_sync
+
 
     def render(self, sync_frame_time=True):
         if self.viewer:
@@ -96,10 +103,7 @@ class BaseTask():
 
             # check for keyboard events
             for evt in self.gym.query_viewer_action_events(self.viewer):
-                if evt.action == "QUIT" and evt.value > 0:
-                    sys.exit()
-                elif evt.action == "toggle_viewer_sync" and evt.value > 0:
-                    self.enable_viewer_sync = not self.enable_viewer_sync
+                self.handle_viewer_action_event(evt)
 
             # fetch results
             if self.device != 'cpu':

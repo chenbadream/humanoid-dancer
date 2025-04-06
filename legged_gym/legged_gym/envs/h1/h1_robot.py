@@ -5,6 +5,8 @@ from isaacgym.torch_utils import *
 from isaacgym import gymtorch, gymapi, gymutil
 import torch
 
+from legged_gym.envs.h1.h1_config import H1Cfg
+
 class H1Robot(HumanoidRobot):
     
     def _get_noise_scale_vec(self, cfg):
