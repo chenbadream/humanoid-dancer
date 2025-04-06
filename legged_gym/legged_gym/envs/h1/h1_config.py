@@ -101,7 +101,7 @@ class Asset(humanoid_robot_config.Asset):
     waist_yaw_name: Optional[str] = "torso"
 
 @dataclass
-class Rewards(legged_robot_config.Rewards):
+class Rewards(humanoid_robot_config.Rewards):
     only_positive_rewards: bool = False # important for rl training
     soft_dof_pos_limit: float = 0.9
     base_height_target: float = 1.05

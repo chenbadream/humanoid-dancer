@@ -28,4 +28,8 @@ class Asset(legged_robot_config.Asset):
     waist_yaw_name: Optional[str] = None
     waist_pitch_name: Optional[str] = None
     
+@dataclass
+class Rewards(legged_robot_config.Rewards):
+    desired_feet_max_height_for_this_air: float = 0.25
+    
     

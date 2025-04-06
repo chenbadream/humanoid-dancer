@@ -245,3 +245,68 @@ class HumanoidRobot(LeggedRobot):
         # self._contact_forces[env_ids] = 0
 
         return
+    
+    #------------ reward functions----------------
+    
+    def _reward_lower_action_rate(self):
+        # Penalize changes in actions
+        lower_dof_indices = torch.concat([
+            self.hip_roll_joint_indices,
+            self.hip_yaw_joint_indices,
+            self.hip_pitch_joint_indices,
+            self.knee_joint_indices,
+            self.ankle_roll_joint_indices,
+            self.ankle_yaw_joint_indices,
+            self.ankle_pitch_joint_indices,
+        ])
+        return torch.sum(torch.square(self.last_actions[:, lower_dof_indices] - self.actions[:, lower_dof_indices]), dim=1)
+    
+    def _reward_upper_action_rate(self):
+        # Penalize changes in actions
+        upper_dof_indices = torch.concat([
+            self.shoulder_roll_joint_indices,
+            self.shoulder_yaw_joint_indices,
+            self.shoulder_pitch_joint_indices,
+            self.elbow_joint_indices,
+            self.wrist_roll_joint_indices,
+            self.wrist_yaw_joint_indices,
+            self.wrist_pitch_joint_indices,
+            self.waist_roll_joint_indices,
+            self.waist_yaw_joint_indices,
+            self.waist_pitch_joint_indices,
+        ])
+        return torch.sum(torch.square(self.last_actions[:, upper_dof_indices] - self.actions[:, upper_dof_indices]), dim=1)
+    
+    def _reward_slippage(self):
+        foot_vel = self.rigid_body_states[:, self.feet_indices, 7:10]
+        return torch.sum(torch.norm(foot_vel, dim=-1) * (torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) > 1.), dim=1)
+    
+    def _reward_feet_ori(self):
+        left_quat = self.rigid_body_states[:, self.feet_indices[0], 3:7]
+        left_gravity = quat_rotate_inverse(left_quat, self.gravity_vec)
+        right_quat = self.rigid_body_states[:, self.feet_indices[1], 3:7]
+        right_gravity = quat_rotate_inverse(right_quat, self.gravity_vec)
+        return torch.sum(torch.square(left_gravity[:, :2]), dim=1)**0.5 + torch.sum(torch.square(right_gravity[:, :2]), dim=1)**0.5 
+    
+    def _reward_in_the_air(self):
+        contact = self.contact_forces[:, self.feet_indices, 2] > 1.
+        contact_filt = torch.logical_or(contact, self.last_contacts) 
+        first_foot_contact = contact_filt[:,0]
+        second_foot_contact = contact_filt[:,1]
+        reward = ~(first_foot_contact | second_foot_contact)
+        return reward
+    
+    def _reward_feet_max_height_for_this_air(self):
+        # Reward long steps
+        # Need to filter the contacts because the contact reporting of PhysX is unreliable on meshes
+        contact = self.contact_forces[:, self.feet_indices, 2] > 1.
+        contact_filt = torch.logical_or(contact, self.last_contacts) 
+        from_air_to_contact = torch.logical_and(contact_filt, ~self.last_contacts_filt)
+        self.last_contacts = contact
+        self.last_contacts_filt = contact_filt
+
+        self.feet_air_max_height = torch.max(self.feet_air_max_height, self.rigid_body_states[:, self.feet_indices, 2])
+        
+        rew_feet_max_height = torch.sum((torch.clamp_min(self.cfg.rewards.desired_feet_max_height_for_this_air - self.feet_air_max_height, 0)) * from_air_to_contact, dim=1) # reward only on first contact with the ground
+        self.feet_air_max_height *= ~contact_filt
+        return rew_feet_max_height
