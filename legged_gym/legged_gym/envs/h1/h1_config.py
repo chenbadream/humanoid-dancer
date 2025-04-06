@@ -143,6 +143,7 @@ class H1Cfg:
     sim: legged_robot_config.Sim = field(default_factory=legged_robot_config.Sim)
     
     seed: int = field(init=False)
+    name = 'h1'
 
 @dataclass
 class Policy( legged_robot_config.Policy ):

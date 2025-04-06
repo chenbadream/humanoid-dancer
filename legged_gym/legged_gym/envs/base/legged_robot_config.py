@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 
 @dataclass
 class Env:
@@ -235,7 +235,7 @@ class Runner:
     experiment_name: str = 'test'
     run_name: str = ''
     resume: bool = False
-    load_run: int = -1
+    load_run: Union[int, str] = -1
     checkpoint: int = -1
     resume_path: Optional[str] = None
 

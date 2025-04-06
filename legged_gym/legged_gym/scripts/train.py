@@ -11,10 +11,8 @@ from legged_gym.utils import task_registry
 
 @dataclass  
 class Args:
-    # Resume training or start testing from a checkpoint. Overrides config file if provided.
-    task: str = "h1_lower"
-    env_cfg: H1Cfg = field(default_factory=H1Cfg)
-    train_cfg: H1PPOCfg = field(default_factory=H1PPOCfg)
+    env_cfg: Union[h1_config.H1Cfg, h1_mimic_config.H1MimicCfg] = field(default_factory=h1_config.H1Cfg)
+    train_cfg: Union[h1_config.H1PPOCfg, h1_mimic_config.H1MimicPPOCfg] = field(default_factory=h1_config.H1PPOCfg)
     # Resume training from a checkpoint
     resume: bool = False
     # Name of the experiment to run or load. Overrides config file if provided.
@@ -22,7 +20,7 @@ class Args:
     # Name of the run. Overrides config file if provided.
     run_name: Optional[str] = None
     # Name of the run to load when resume=True. If -1: will load the last run. Overrides config file if provided.
-    load_run: Optional[int] = None
+    load_run: Optional[Union[str, int]] = None
     # Saved model checkpoint number. If -1: will load the last checkpoint. Overrides config file if provided.
     checkpoint: Optional[int] = None
     
@@ -72,8 +70,8 @@ class Args:
             self.train_cfg.runner.checkpoint = self.checkpoint
         
 def train(args: Args):
-    env, env_cfg = task_registry.make_env(name=args.task, args=args, env_cfg=args.env_cfg)
-    ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=args.train_cfg)
+    env, env_cfg = task_registry.make_env(args=args, env_cfg=args.env_cfg)
+    ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, args=args, train_cfg=args.train_cfg)
     ppo_runner.learn(num_learning_iterations=train_cfg.runner.max_iterations, init_at_random_ep_len=False)
     
 if __name__ == "__main__":

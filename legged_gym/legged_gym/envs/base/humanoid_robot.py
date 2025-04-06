@@ -3,7 +3,7 @@ import torch
 
 from loguru import logger
 
-from isaacgym import gymapi
+from isaacgym import gymapi, gymtorch
 from isaacgym.torch_utils import *
 
 from legged_gym import LEGGED_GYM_ROOT_DIR
@@ -11,6 +11,95 @@ from .legged_robot import LeggedRobot
 from .humanoid_robot_config import Asset
 
 class HumanoidRobot(LeggedRobot):
+    def __init__(self, cfg, sim_params, physics_engine, sim_device, headless):
+        super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
+        self._setup_viewer()
+        
+    def _setup_viewer(self):
+        if not self.headless:
+            # self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_L, "toggle_video_record")
+            # self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_SEMICOLON, "cancel_video_record")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_R, "reset")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_F, "follow")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_C, "print_cam")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_K, "show_traj")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_J, "apply_force")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_LEFT, "prev_env")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_RIGHT, "next_env")
+
+        self.follow = True
+        self.viewing_env_idx = 0
+        self.show_traj = False
+        self._cam_prev_char_pos = self.root_states[self.viewing_env_idx, 0:3].cpu().numpy() + np.array([2.5, 2.5, 0])
+        
+    def _update_camera(self):
+        self.gym.refresh_actor_root_state_tensor(self.sim)
+        char_root_pos = self.root_states[self.viewing_env_idx, 0:3].cpu().numpy()
+
+        if self.viewer:
+            cam_trans = self.gym.get_viewer_camera_transform(self.viewer, None)
+            cam_pos = np.array([cam_trans.p.x, cam_trans.p.y, cam_trans.p.z])
+        else:
+            cam_pos = np.array([char_root_pos[0] + 2.5, char_root_pos[1] + 2.5, char_root_pos[2]])
+
+        cam_delta = cam_pos - self._cam_prev_char_pos
+
+        new_cam_target = gymapi.Vec3(char_root_pos[0], char_root_pos[1], char_root_pos[2])
+        # if np.abs(cam_pos[2] - char_root_pos[2]) > 5:
+        cam_pos[2] = char_root_pos[2] + 0.5
+        new_cam_pos = gymapi.Vec3(char_root_pos[0] + cam_delta[0], char_root_pos[1] + cam_delta[1], cam_pos[2])
+
+        # self.gym.set_camera_location(self.recorder_camera_handle, self.envs[self.viewing_env_idx], new_cam_pos, new_cam_target)
+
+        if self.follow:
+            self.gym.viewer_camera_look_at(self.viewer, None, new_cam_pos, new_cam_target)
+
+        self._cam_prev_char_pos[:] = char_root_pos
+        return
+            
+    def render(self, sync_frame_time=True):
+        if self.viewer:
+            self._update_camera()
+        
+        if self.viewer:
+            # check for keyboard events
+            for evt in self.gym.query_viewer_action_events(self.viewer):
+                # elif evt.action == "toggle_video_record" and evt.value > 0:
+                #     self.recording = not self.recording
+                #     self.recording_state_change = True
+                # elif evt.action == "cancel_video_record" and evt.value > 0:
+                #     self.recording = False
+                #     self.recording_state_change = False
+                #     self._video_queue = deque(maxlen=self.max_video_queue_size)
+                #     self._clear_recorded_states()
+                if evt.action == "reset" and evt.value > 0:
+                    self.reset()
+                elif evt.action == "follow" and evt.value > 0:
+                    self.follow = not self.follow
+                elif evt.action == "print_cam" and evt.value > 0:
+                    cam_trans = self.gym.get_viewer_camera_transform(self.viewer, None)
+                    cam_pos = np.array([cam_trans.p.x, cam_trans.p.y, cam_trans.p.z])
+                    # print("Print camera", cam_pos)
+                    logger.info(f"Print camera {cam_pos}")
+                elif evt.action == "show_traj" and evt.value > 0:
+                    self.show_traj = not self.show_traj
+                    logger.info(f"show_traj: {self.show_traj}")
+                elif evt.action == "apply_force" and evt.value > 0:
+                    forces = torch.zeros((1, self.rigid_body_states.shape[0], 3), device=self.device, dtype=torch.float)
+                    torques = torch.zeros((1, self.rigid_body_states.shape[0], 3), device=self.device, dtype=torch.float)
+                    for i in range(self.rigid_body_states.shape[0] // self.num_bodies):
+                        forces[:, i * self.num_bodies + 3, :] = -3500
+                        forces[:, i * self.num_bodies + 7, :] = -3500
+                    self.gym.apply_rigid_body_force_tensors(self.sim, gymtorch.unwrap_tensor(forces), gymtorch.unwrap_tensor(torques), gymapi.ENV_SPACE)
+                    
+                elif evt.action == "prev_env" and evt.value > 0:
+                    self.viewing_env_idx = (self.viewing_env_idx - 1) % self.num_envs
+                    logger.info(f"\nShowing env: {self.viewing_env_idx}")
+                elif evt.action == "next_env" and evt.value > 0:
+                    self.viewing_env_idx = (self.viewing_env_idx + 1) % self.num_envs
+                    logger.info(f"\nShowing env: {self.viewing_env_idx}")
+        super().render(sync_frame_time)
+    
     def _create_envs(self):
         super()._create_envs()
         

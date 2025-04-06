@@ -33,7 +33,7 @@ class TaskRegistry():
         env_cfg.seed = train_cfg.seed
         return env_cfg, train_cfg
     
-    def make_env(self, name, args=None, env_cfg=None) -> Tuple[VecEnv, LeggedRobotCfg]:
+    def make_env(self, name=None, args=None, env_cfg=None) -> Tuple[VecEnv, LeggedRobotCfg]:
         """ Creates an environment either from a registered namme or from the provided config file.
 
         Args:
@@ -52,6 +52,9 @@ class TaskRegistry():
         if args is None:
             args = get_args()
         # check if there is a registered env with that name
+        if name is None:
+            assert env_cfg is not None, "Either 'name' or 'env_cfg' must be not None"
+            name = env_cfg.name
         if name in self.task_classes:
             task_class = self.get_task_class(name)
         else:
