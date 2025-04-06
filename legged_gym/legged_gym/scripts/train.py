@@ -13,8 +13,8 @@ from legged_gym.utils import task_registry
 class Args:
     # Resume training or start testing from a checkpoint. Overrides config file if provided.
     task: str = "h1_lower"
-    env_cfg: H1LowerCfg = field(default_factory=H1LowerCfg)
-    train_cfg: H1LowerCfgPPO = field(default_factory=H1LowerCfgPPO)
+    env_cfg: H1Cfg = field(default_factory=H1Cfg)
+    train_cfg: H1PPOCfg = field(default_factory=H1PPOCfg)
     # Resume training from a checkpoint
     resume: bool = False
     # Name of the experiment to run or load. Overrides config file if provided.

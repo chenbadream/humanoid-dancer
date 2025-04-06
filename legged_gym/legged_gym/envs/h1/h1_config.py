@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict
 
-from legged_gym.envs.base import legged_robot_config
+from legged_gym.envs.base import legged_robot_config, humanoid_robot_config
 
 @dataclass
 class InitState( legged_robot_config.InitState ):
@@ -30,10 +30,11 @@ class InitState( legged_robot_config.InitState ):
 
 @dataclass
 class Env(legged_robot_config.Env):
-    # # 3 + 3 + 3 + 10 + 10 + 10 + 2 = 41
-    num_observations: int = 41
-    num_privileged_obs: Optional[int] = 44
-    num_actions: int = 10
+    # 3 + 3 + 3 + 19 * 3 + 2 = 68
+    num_observations: int = 68
+    # 3 + 3 + 3 + 19 * 3 + 2 + 3(base lin vel) = 71
+    num_privileged_obs: Optional[int] = 71
+    num_actions: int = 19
     
 @dataclass
 class DomainRand(legged_robot_config.DomainRand):
@@ -75,19 +76,36 @@ class Control(legged_robot_config.Control):
     decimation: int = 4
 
 @dataclass
-class Asset(legged_robot_config.Asset):
-    file: str = '{LEGGED_GYM_ROOT_DIR}/resources/robots/h1_lower/urdf/h1.urdf'
+class Asset(humanoid_robot_config.Asset):
+    file: str = '{LEGGED_GYM_ROOT_DIR}/resources/robots/h1/urdf/h1.urdf'
     name: str = "h1"
     foot_name: str = "ankle"
     penalize_contacts_on: List[str] = field(default_factory=lambda: ["hip", "knee"])
     terminate_after_contacts_on: List[str] = field(default_factory=lambda: ["pelvis"])
-    self_collisions: int = 0 # 1 to disable, 0 to enable...bitwise filter
+    self_collisions: int = 1 # 1 to disable, 0 to enable...bitwise filter
     flip_visual_attachments: bool = False
+    
+    hip_roll_name: Optional[str] = "hip_roll"
+    hip_yaw_name: Optional[str] = "hip_yaw"
+    hip_pitch_name: Optional[str] = "hip_pitch"
+    
+    shoulder_roll_name: Optional[str] = "shoulder_roll"
+    shoulder_yaw_name: Optional[str] = "shoulder_yaw"
+    shoulder_pitch_name: Optional[str] = "shoulder_pitch"
+    
+    elbow_name: Optional[str] = "elbow"
+    knee_name: Optional[str] = "knee"
+    
+    ankle_pitch_name: Optional[str] = "ankle"
+    
+    waist_yaw_name: Optional[str] = "torso"
 
 @dataclass
 class Rewards(legged_robot_config.Rewards):
+    only_positive_rewards: bool = False # important for rl training
     soft_dof_pos_limit: float = 0.9
     base_height_target: float = 1.05
+    fixed_upper_body_positive_sigma: float = 1. 
     scales: Dict[str, float] = field(default_factory=lambda: {
         'tracking_lin_vel': 1.0,
         'tracking_ang_vel': 0.5,
@@ -105,11 +123,12 @@ class Rewards(legged_robot_config.Rewards):
         'hip_pos': -1.0,
         'contact_no_vel': -0.2,
         'feet_swing_height': -20.0,
-        'contact': 0.18
+        'contact': 0.18,
+        'fixed_upper_body_positive': 1,
     })
 
 @dataclass
-class H1LowerCfg:
+class H1Cfg:
     env: Env = field(default_factory=Env)
     terrain: legged_robot_config.Terrain = field(default_factory=legged_robot_config.Terrain)
     commands: legged_robot_config.Commands = field(default_factory=legged_robot_config.Commands)
@@ -128,12 +147,6 @@ class H1LowerCfg:
 @dataclass
 class Policy( legged_robot_config.Policy ):
     init_noise_std: float = 0.8
-    actor_hidden_dims: List[int] = field(default_factory=lambda: [32])
-    critic_hidden_dims: List[int] = field(default_factory=lambda: [32])
-    activation: str = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
-    rnn_type: str = 'lstm'
-    rnn_hidden_size: int = 64
-    rnn_num_layers: int = 1
 
 @dataclass
 class Algorithm( legged_robot_config.Algorithm ):
@@ -141,13 +154,13 @@ class Algorithm( legged_robot_config.Algorithm ):
     
 @dataclass
 class Runner( legged_robot_config.Runner ):
-    policy_class_name: str = "ActorCriticRecurrent"
+    policy_class_name: str = "ActorCritic"
     max_iterations: int = 10000
     run_name: str = ''
     experiment_name: str = 'h1'
 
 @dataclass
-class H1LowerCfgPPO:    
+class H1PPOCfg:    
     seed: int = 1
     runner_class_name: str = 'OnPolicyRunner'
     policy: Policy = field(default_factory=Policy)

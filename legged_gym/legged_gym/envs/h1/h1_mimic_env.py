@@ -1,11 +1,11 @@
 
-from legged_gym.envs.base.humanoid_robot import HumanoidRobot
+from legged_gym.envs.base.legged_robot import LeggedRobot
 
 from isaacgym.torch_utils import *
 from isaacgym import gymtorch, gymapi, gymutil
 import torch
 
-class H1Robot(HumanoidRobot):
+class H1Robot(LeggedRobot):
     
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
@@ -120,23 +120,5 @@ class H1Robot(HumanoidRobot):
         return torch.sum(penalize, dim=(1,2))
     
     def _reward_hip_pos(self):
-        hip_yaw_roll_joint_indices = torch.concat([self.hip_yaw_joint_indices, self.hip_roll_joint_indices], dim=0)
-        return torch.sum(torch.square(self.dof_pos[:, hip_yaw_roll_joint_indices]), dim=1)
-    
-    def _reward_fixed_upper_body_positive(self):
-        # Penalize the upper body to be fixed
-        upper_body_joint_indices = torch.concat([
-            self.shoulder_pitch_joint_indices,
-            self.shoulder_roll_joint_indices,
-            self.shoulder_yaw_joint_indices,
-            self.elbow_joint_indices,
-            self.waist_pitch_joint_indices,
-            self.waist_roll_joint_indices,
-            self.waist_yaw_joint_indices,
-            self.wrist_pitch_joint_indices,
-            self.wrist_roll_joint_indices,
-            self.wrist_yaw_joint_indices,
-        ])
-        diff = torch.sum(torch.square(self.dof_pos[:, upper_body_joint_indices] - self.default_dof_pos[:, upper_body_joint_indices]), dim=1)
-        return torch.exp(- diff / self.cfg.rewards.fixed_upper_body_positive_sigma)
+        return torch.sum(torch.square(self.dof_pos[:,[0,1,5,6]]), dim=1)
     
