@@ -55,30 +55,30 @@ Our parameters are managed by a lightweight command-line interface [tyro](https:
 
 - Train a walking policy for H1:
 
-``
+```
 python legged_gym/scripts/train.py --max-iterations 10000 env-cfg:h1-cfg train-cfg:h1-cfg        
-``
+```
 
 - Train a DeepMimic-styled imitation policy for H1:
 
-``
+```
 python legged_gym/scripts/train.py --max-iterations 100000 env-cfg:h1-mimic-cfg --env-cfg.motion.motion-file resources/motions/h1/amass_phc_filtered.pkl train-cfg:h1-mimic-ppo-cfg
-``
+```
 
 
 When running these policies, a `logs` folder will appear, containing task-specific subfolders like `h1` or `h1-mimic`. These are timestamped folders storing training logs and model checkpoints.
 
 - Load and run a policy:
 
-``
+```
 python legged_gym/scripts/play.py --load_run {run_name} --num_envs 1 env-cfg:h1-cfg train-cfg:h1-cfg 
-``
+```
 
 or
 
-``
+```
 python legged_gym/scripts/play.py --load_run {run_name} --num_envs 1 env-cfg:h1-mimic-cfg --env-cfg.viewer.debug-viz train-cfg:h1-mimic-ppo-cfg 
-``
+```
 
 
 If you enable the GUI, you can use the following keys for interaction:
