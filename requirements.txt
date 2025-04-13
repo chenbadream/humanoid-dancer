@@ -39,3 +39,4 @@ open3d
 gdown
 
 tyro
+loguru

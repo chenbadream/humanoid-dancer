@@ -16,7 +16,6 @@ from legged_gym.scripts.train import Args
 
 
 def play(args: Args):
-    args.headless = False
     env_cfg, train_cfg = args.env_cfg, args.train_cfg
     # override some parameters for testing
     env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)

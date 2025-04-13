@@ -129,7 +129,4 @@ venv.bak/
  # Pyre type checker
 .pyre/
 
-legged_gym_h2o
-unitree_rl_gym
-
 logs

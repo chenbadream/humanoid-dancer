@@ -101,12 +101,13 @@ class Rewards(h1_config.Rewards):
         'feet_ori': -50.0 * 1.25,
         'in_the_air': -200,
         'orientation': -200.0,
+        'alive': 1.0,
         'feet_max_height_for_this_air': -2500,
-        'tracking_selected_joint_position': 32 * 3,
-        'tracking_selected_joint_vel': 16 * 3,
-        'tracking_root_rotation': 20.0 * 3,
-        'tracking_root_vel': 8.0 * 3,
-        'tracking_root_ang_vel': 8.0 * 3,
+        'tracking_selected_joint_position': 32 * 6,
+        'tracking_selected_joint_vel': 16,
+        'tracking_root_rotation': 20.0,
+        'tracking_root_vel': 8.0 * 6,
+        'tracking_root_ang_vel': 8.0 * 6,
     })
     
 @dataclass
