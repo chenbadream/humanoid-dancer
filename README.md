@@ -68,10 +68,10 @@ python legged_gym/scripts/train.py --max-iterations 100000 env-cfg:h1-mimic-cfg 
 
 When running these policies, a `logs` folder will appear, containing task-specific subfolders like `h1` or `h1-mimic`. These are timestamped folders storing training logs and model checkpoints.
 
-- Load and run a policy:
+- Load and run a policy without GUI:
 
 ```
-python legged_gym/scripts/play.py --load_run {run_name} --num_envs 1 env-cfg:h1-cfg train-cfg:h1-cfg 
+python legged_gym/scripts/play.py --load_run {run_name} --num_envs 1 env-cfg:h1-cfg train-cfg:h1-ppo-cfg 
 ```
 
 or
@@ -80,6 +80,16 @@ or
 python legged_gym/scripts/play.py --load_run {run_name} --num_envs 1 env-cfg:h1-mimic-cfg --env-cfg.viewer.debug-viz train-cfg:h1-mimic-ppo-cfg 
 ```
 
+- Load and run a policy with GUI:
+
+```
+python legged_gym/scripts/play.py --load_run {run_name} --no-headless --num_envs 1 env-cfg:h1-cfg train-cfg:h1-ppo-cfg 
+```
+
+or
+
+```
+python legged_gym/scripts/play.py --load_run {run_name} --no-headless --num_envs 1 env-cfg:h1-mimic-cfg --env-cfg.viewer.debug-viz train-cfg:h1-mimic-ppo-cfg
 
 If you enable the GUI, you can use the following keys for interaction:
 
