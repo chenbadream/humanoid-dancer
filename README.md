@@ -56,7 +56,7 @@ Our parameters are managed by a lightweight command-line interface [tyro](https:
 - Train a walking policy for H1:
 
 ```
-python legged_gym/scripts/train.py --max-iterations 10000 env-cfg:h1-cfg train-cfg:h1-cfg        
+python legged_gym/scripts/train.py --max-iterations 10000 env-cfg:h1-cfg train-cfg:h1-ppo-cfg        
 ```
 
 - Train a DeepMimic-styled imitation policy for H1:
