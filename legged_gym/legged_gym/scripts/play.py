@@ -13,6 +13,7 @@ import numpy as np
 import torch
 
 from legged_gym.scripts.train import Args
+from legged_gym.envs.h1.h1_amp_config import H1AMPCfg, H1AMPCfgPPO
 
 
 def play(args: Args):

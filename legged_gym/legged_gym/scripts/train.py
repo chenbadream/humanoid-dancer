@@ -8,11 +8,12 @@ from isaacgym import gymapi
 
 from legged_gym.envs import *
 from legged_gym.utils import task_registry
+from legged_gym.envs.h1.h1_amp_config import H1AMPCfg, H1AMPCfgPPO
 
 @dataclass  
 class Args:
-    env_cfg: Union[h1_config.H1Cfg, h1_mimic_config.H1MimicCfg] = field(default_factory=h1_config.H1Cfg)
-    train_cfg: Union[h1_config.H1PPOCfg, h1_mimic_config.H1MimicPPOCfg] = field(default_factory=h1_config.H1PPOCfg)
+    env_cfg: Union[h1_config.H1Cfg, h1_mimic_config.H1MimicCfg, H1AMPCfg] = field(default_factory=h1_config.H1Cfg)
+    train_cfg: Union[h1_config.H1PPOCfg, h1_mimic_config.H1MimicPPOCfg, H1AMPCfgPPO] = field(default_factory=h1_config.H1PPOCfg)
     # Resume training from a checkpoint
     resume: bool = False
     # Name of the experiment to run or load. Overrides config file if provided.

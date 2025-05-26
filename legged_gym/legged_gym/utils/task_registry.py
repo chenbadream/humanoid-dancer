@@ -11,6 +11,8 @@ from rsl_rl.runners import OnPolicyRunner
 from legged_gym import LEGGED_GYM_ROOT_DIR, LEGGED_GYM_ENVS_DIR
 from .helpers import get_args, update_cfg_from_args, class_to_dict, get_load_path, set_seed, parse_sim_params
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO
+from legged_gym.envs.h1.h1_amp import H1AMP
+from legged_gym.envs.h1.h1_amp_config import H1AMPCfg, H1AMPCfgPPO
 
 class TaskRegistry():
     def __init__(self):
@@ -130,3 +132,10 @@ class TaskRegistry():
 
 # make global task registry
 task_registry = TaskRegistry()
+
+task_registry.register(
+    name='h1_amp',
+    task_class=H1AMP,
+    env_cfg=H1AMPCfg(),
+    train_cfg=H1AMPCfgPPO()
+)
