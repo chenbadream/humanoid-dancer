@@ -36,7 +36,7 @@ import statistics
 from torch.utils.tensorboard import SummaryWriter
 import torch
 
-from rsl_rl.algorithms import PPO
+from rsl_rl.algorithms import PPO, AMP
 from rsl_rl.modules import ActorCritic, ActorCriticRecurrent
 from rsl_rl.env import VecEnv
 
@@ -47,9 +47,12 @@ class OnPolicyRunner:
                  env: VecEnv,
                  train_cfg,
                  log_dir=None,
-                 device='cpu'):
+                 device='cpu',
+                 discriminator=None,  # Added discriminator
+                 demo_buffer=None,  # Added demo_buffer
+                 replay_buffer=None):  # Added replay_buffer
 
-        self.cfg=train_cfg["runner"]
+        self.cfg = train_cfg["runner"]
         self.alg_cfg = train_cfg["algorithm"]
         self.policy_cfg = train_cfg["policy"]
         self.device = device
@@ -63,8 +66,14 @@ class OnPolicyRunner:
                                                         num_critic_obs,
                                                         self.env.num_actions,
                                                         **self.policy_cfg).to(self.device)
-        alg_class = eval(self.cfg["algorithm_class_name"]) # PPO
-        self.alg: PPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
+        alg_class = eval(self.cfg["algorithm_class_name"]) # PPO or AMP
+
+        # Pass discriminator, demo_buffer, and replay_buffer if AMP is used
+        if alg_class.__name__ == "AMP":
+            self.alg: AMP = alg_class(actor_critic, discriminator, demo_buffer, replay_buffer, device=self.device, **self.alg_cfg)
+        else:
+            self.alg: PPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
+
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]
 
@@ -109,6 +118,11 @@ class OnPolicyRunner:
                     critic_obs = privileged_obs if privileged_obs is not None else obs
                     obs, critic_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), rewards.to(self.device), dones.to(self.device)
                     self.alg.process_env_step(rewards, dones, infos)
+
+                    # Add agent observations to replay buffer for AMP
+                    if hasattr(self.alg, 'replay_buffer') and self.alg.replay_buffer is not None:
+                        # Store only the first 68 dims (raw obs) for AMP
+                        self.alg.replay_buffer.add(obs.cpu().numpy()[:, :68])
                     
                     if self.log_dir is not None:
                         # Book keeping
@@ -129,7 +143,7 @@ class OnPolicyRunner:
                 start = stop
                 self.alg.compute_returns(critic_obs)
             
-            mean_value_loss, mean_surrogate_loss = self.alg.update()
+            mean_value_loss, mean_surrogate_loss, mean_disc_loss = self.alg.update()
             stop = time.time()
             learn_time = stop - start
             if self.log_dir is not None:
