@@ -3,7 +3,36 @@ from typing import Optional, Dict, List, Union
 
 from legged_gym.envs.h1 import h1_config
 from legged_gym.envs.base import legged_robot_config
+from .h1_mimic_config import Rewards as MimicRewards
 
+@dataclass
+class VisaulizeConfig:
+    customize_color: bool = True
+    marker_joint_colors: List[List[float]] = field(default_factory=lambda: [
+        [0.157, 0.231, 0.361], # pelvis
+        [0.157, 0.231, 0.361], # left_hip_yaw_joint
+        [0.157, 0.231, 0.361], # left_hip_roll_joint
+        [0.157, 0.231, 0.361], # left_hip_pitch_joint
+        [0.157, 0.231, 0.361], # left_knee_joint
+        [0.157, 0.231, 0.361], # left_ankle_joint
+        [0.157, 0.231, 0.361], # right_hip_yaw_joint
+        [0.157, 0.231, 0.361], # right_hip_roll_joint
+        [0.157, 0.231, 0.361], # right_hip_pitch_joint
+        [0.157, 0.231, 0.361], # right_knee_joint
+        [0.157, 0.231, 0.361], # right_ankle_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+        [0.765, 0.298, 0.498], # torso_joint
+    ])
+    
 @dataclass
 class Motion:
     motion_file: str = 'resources/motions/h1/stable_punch.pkl'
@@ -13,6 +42,7 @@ class Motion:
     dt: Optional[float] = None
     sync: bool = False
     test_keys: Optional[List[str]] = None
+    visualize_config: VisaulizeConfig = field(default_factory=VisaulizeConfig)
 
 @dataclass
 class Env(h1_config.Env):
@@ -20,9 +50,39 @@ class Env(h1_config.Env):
     num_observations: int = 119
 
 @dataclass
-class Rewards(h1_config.Rewards):
+class Rewards(MimicRewards):
     only_positive_rewards: bool = False
-    # Add AMP-specific reward parameters if needed
+    # AMP-specific parameters
+    task_reward_lerp: float = 0.5  # Balanced between task and discriminator rewards
+    
+    # Override scales to add AMP-specific reward term
+    scales: Dict[str, float] = field(default_factory=lambda: {
+        # Reduce penalty scales to make task rewards less negative
+        'torques': -0.000005,  # Reduced penalty
+        'torque_limits': -1.,  # Reduced penalty
+        'dof_acc': -0.000005,  # Reduced penalty
+        'dof_vel': -0.002,  # Reduced penalty
+        'lower_action_rate': -1.5,  # Reduced penalty
+        'upper_action_rate': -0.3,  # Reduced penalty
+        'dof_pos_limits': -50.0,  # Reduced penalty
+        'termination': -100.0,  # Reduced penalty
+        'feet_contact_forces': -0.4,  # Reduced penalty
+        'stumble': -500.0,  # Reduced penalty
+        'feet_air_time_tracking': 1000,  # Keep positive rewards
+        'slippage': -15.0,  # Reduced penalty
+        'feet_ori': -25.0,  # Reduced penalty
+        'in_the_air': -100,  # Reduced penalty
+        'orientation': -100.0,  # Reduced penalty
+        'alive': 2.0,  # Increased positive reward
+        'feet_max_height_for_this_air': -1250,  # Reduced penalty
+        'tracking_selected_joint_position': 32 * 6,  # Keep high positive reward
+        'tracking_selected_joint_vel': 16,  # Keep positive reward
+        'tracking_root_rotation': 20.0,  # Keep positive reward
+        'tracking_root_vel': 8.0 * 6,  # Keep positive reward
+        'tracking_root_ang_vel': 8.0 * 6,  # Keep positive reward
+        # AMP-specific reward term (from discriminator)
+        'amp': 5.0,  # Increased to give more weight to discriminator rewards
+    })
 
 @dataclass
 class H1AMPCfg:
@@ -44,8 +104,16 @@ class H1AMPCfg:
 
 @dataclass  
 class Policy(h1_config.Policy):
-    init_noise_std: float = 1.
+    init_noise_std: float = 1.0
     # Add AMP-specific policy parameters if needed
+
+@dataclass
+class Algorithm(h1_config.Algorithm):
+    # PPO parameters
+    entropy_coef: float = 0.01
+    # AMP-specific parameters
+    disc_coef: float = 1.0  # discriminator loss coefficient
+    disc_learning_rate: float = 1e-5  # DeepMimic: DiscStepSize: 0.00001
 
 @dataclass
 class Runner(h1_config.Runner):
@@ -57,5 +125,5 @@ class H1AMPCfgPPO:
     seed: int = 1
     runner_class_name: str = 'OnPolicyRunner'
     policy: Policy = field(default_factory=Policy)
-    algorithm: h1_config.Algorithm = field(default_factory=h1_config.Algorithm)
+    algorithm: Algorithm = field(default_factory=Algorithm)
     runner: Runner = field(default_factory=Runner)

@@ -11,6 +11,20 @@ from smpl_sim.poselib.skeleton.skeleton3d import SkeletonTree
 from .h1_mimic import H1Mimic
 
 class H1AMP(H1Mimic):
+    def __init__(self, cfg, sim_params, physics_engine, sim_device, headless):
+        super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
+        
+        # AMP-specific initialization
+        self.amp_obs_dim = 119  # Standard AMP observation dimension for humanoid
+        self.amp_obs_buf = torch.zeros(self.num_envs, self.amp_obs_dim, dtype=torch.float, device=self.device, requires_grad=False)
+        
+        # Store previous states for AMP observation construction
+        self.prev_dof_pos = torch.zeros_like(self.dof_pos)
+        self.prev_dof_vel = torch.zeros_like(self.dof_vel)
+        self.prev_base_quat = torch.zeros_like(self.base_quat)
+        self.prev_base_lin_vel = torch.zeros_like(self.base_lin_vel)
+        self.prev_base_ang_vel = torch.zeros_like(self.base_ang_vel)
+        
     def _parse_cfg(self, cfg):
         super()._parse_cfg(cfg)
         self.cfg.motion.resample_motions_for_envs_interval = np.ceil(self.cfg.motion.resample_motions_for_envs_interval_s / self.dt)
@@ -26,15 +40,105 @@ class H1AMP(H1Mimic):
         self.reset_buf |= self.time_out_buf
 
     def compute_observations(self):
-        # This is a copy of H1Mimic, but you can add AMP-specific features here
-        offset = self.env_origins
-        B = self.motion_ids.shape[0]
-        if self.cfg.motion.sync:
-            motion_times = torch.tensor([self._hack_motion_time] * B, dtype=torch.float32, device=self.device).view(-1)
-        else:
-            motion_times = (self.episode_length_buf + 1) * self.dt + self.motion_start_times
-        motion_res = self._get_state_from_motionlib_cache_trimesh(self.motion_ids, motion_times, offset=offset)
-        # ...existing code from H1Mimic for observation construction...
+        # Call parent implementation from H1Mimic
+        super().compute_observations()
+        
+        # Compute AMP observations using consecutive timesteps (DeepMimic approach)
+        self.amp_obs_buf = self._compute_amp_observations()
+        
+        # Update previous states for next timestep
+        self._update_previous_states()
+        
+    def _compute_amp_observations(self):
+        """Compute 119-dimensional AMP observations for discriminator using consecutive timesteps"""
+        B = self.num_envs
+        
+        # Current state (pose at time t)
+        curr_dof_pos = self.dof_pos
+        curr_dof_vel = self.dof_vel
+        curr_base_quat = self.base_quat
+        curr_base_lin_vel = self.base_lin_vel
+        curr_base_ang_vel = self.base_ang_vel
+        
+        # Previous state (pose at time t-1)
+        prev_dof_pos = self.prev_dof_pos
+        prev_dof_vel = self.prev_dof_vel
+        prev_base_quat = self.prev_base_quat
+        prev_base_lin_vel = self.prev_base_lin_vel
+        prev_base_ang_vel = self.prev_base_ang_vel
+        
+        # Build AMP observation following DeepMimic pattern:
+        # [current_pose, previous_pose, current_vel, previous_vel]
+        
+        # Current pose features
+        curr_root_h = self.root_states[:, 2:3]  # Root height
+        curr_heading_rot = torch_utils.calc_heading_quat(curr_base_quat)
+        curr_heading_rot_inv = torch_utils.calc_heading_quat_inv(curr_base_quat)
+        
+        # Transform current orientation to heading-relative
+        curr_local_rot = torch_utils.quat_mul(curr_heading_rot_inv, curr_base_quat)
+        curr_rot_tan_norm = torch_utils.quat_to_tan_norm(curr_local_rot).view(B, -1)
+        
+        # Current joint positions (relative to default)
+        curr_joint_pos = curr_dof_pos - self.default_dof_pos
+        
+        # Previous pose features  
+        prev_root_h = self.root_states[:, 2:3]  # Note: this is current, we'd need to store previous root height
+        prev_heading_rot = torch_utils.calc_heading_quat(prev_base_quat)
+        prev_heading_rot_inv = torch_utils.calc_heading_quat_inv(prev_base_quat)
+        
+        # Transform previous orientation to heading-relative
+        prev_local_rot = torch_utils.quat_mul(prev_heading_rot_inv, prev_base_quat)
+        prev_rot_tan_norm = torch_utils.quat_to_tan_norm(prev_local_rot).view(B, -1)
+        
+        # Previous joint positions (relative to default)
+        prev_joint_pos = prev_dof_pos - self.default_dof_pos
+        
+        # Current velocity features
+        curr_local_lin_vel = torch_utils.quat_rotate_inverse(curr_heading_rot, curr_base_lin_vel)
+        curr_local_ang_vel = torch_utils.quat_rotate_inverse(curr_heading_rot, curr_base_ang_vel)
+        
+        # Previous velocity features
+        prev_local_lin_vel = torch_utils.quat_rotate_inverse(prev_heading_rot, prev_base_lin_vel)
+        prev_local_ang_vel = torch_utils.quat_rotate_inverse(prev_heading_rot, prev_base_ang_vel)
+        
+        # Concatenate all features to build 119-dimensional AMP observation
+        # Following DeepMimic structure: poses (current + previous) + velocities (current + previous)
+        amp_obs = torch.cat([
+            # Current pose: root height (1) + root orientation (6) + joint positions (19) = 26
+            curr_root_h,                                         # 1
+            curr_rot_tan_norm,                                  # 6 (2*3 for tan_norm representation)
+            curr_joint_pos * self.obs_scales.dof_pos,          # 19
+            
+            # Previous pose: root height (1) + root orientation (6) + joint positions (19) = 26  
+            prev_root_h,                                         # 1
+            prev_rot_tan_norm,                                  # 6
+            prev_joint_pos * self.obs_scales.dof_pos,          # 19
+            
+            # Current velocity: root linear vel (3) + root angular vel (3) + joint velocities (19) = 25
+            curr_local_lin_vel * self.obs_scales.lin_vel,      # 3
+            curr_local_ang_vel * self.obs_scales.ang_vel,      # 3
+            curr_dof_vel * self.obs_scales.dof_vel,            # 19
+            
+            # Previous velocity: root linear vel (3) + root angular vel (3) + joint velocities (19) = 25
+            prev_local_lin_vel * self.obs_scales.lin_vel,      # 3
+            prev_local_ang_vel * self.obs_scales.ang_vel,      # 3
+            prev_dof_vel * self.obs_scales.dof_vel,            # 19
+            
+            # Additional features to reach 119 dimensions
+            self.projected_gravity,                             # 3
+            torch.zeros(B, 14, device=self.device),            # 14 padding to reach 119 total
+        ], dim=-1)
+        
+        return amp_obs
+    
+    def _update_previous_states(self):
+        """Update previous states for next timestep AMP observation construction"""
+        self.prev_dof_pos.copy_(self.dof_pos)
+        self.prev_dof_vel.copy_(self.dof_vel)
+        self.prev_base_quat.copy_(self.base_quat)
+        self.prev_base_lin_vel.copy_(self.base_lin_vel)
+        self.prev_base_ang_vel.copy_(self.base_ang_vel)
 
     def reset_idx(self, env_ids):
         self._resample_motion_times(env_ids)
@@ -201,3 +305,91 @@ class H1AMP(H1Mimic):
                 sphere_geom_marker = gymutil.WireframeSphereGeometry(0.05, 20, 20, None, color=color_inner)
                 sphere_pose = gymapi.Transform(gymapi.Vec3(pos_joint[0], pos_joint[1], pos_joint[2]), r=None)
                 gymutil.draw_lines(sphere_geom_marker, self.gym, self.viewer, self.envs[env_id], sphere_pose)
+
+    #------------ reward functions----------------
+
+    def _reward_amp(self):
+        # This function should return the discriminator reward for each environment
+        # It is expected that self.amp_rewards is set externally (by the runner/algorithm)
+        # If not set, return zeros
+        if hasattr(self, 'amp_rewards') and self.amp_rewards is not None:
+            return self.amp_rewards
+        else:
+            return torch.zeros_like(self.rew_buf)
+
+    def set_amp_rewards(self, amp_rewards):
+        """
+        Set the AMP (discriminator) rewards for the current environment step.
+        This should be called by the training loop or algorithm after discriminator evaluation.
+        Args:
+            amp_rewards (torch.Tensor): Tensor of shape (num_envs,) with AMP rewards for each environment.
+        """
+        self.amp_rewards = amp_rewards
+        
+    def compute_reward(self):
+        """Override compute_reward to implement AMP reward blending"""
+        # Call parent compute_reward first to get task-specific rewards
+        super().compute_reward()
+        
+        # Store task rewards before modification
+        task_rewards = self.rew_buf.clone()
+        
+        # Debug: Print task reward statistics
+        if hasattr(self, '_debug_step_count'):
+            self._debug_step_count += 1
+        else:
+            self._debug_step_count = 0
+        
+        if self._debug_step_count % 100 == 0:  # Print every 100 steps
+            task_mean = task_rewards.mean().item()
+            task_min = task_rewards.min().item()
+            task_max = task_rewards.max().item()
+            print(f"Task rewards - Mean: {task_mean:.3f}, Min: {task_min:.3f}, Max: {task_max:.3f}")
+        
+        # Get AMP (discriminator) rewards if available
+        if hasattr(self, 'amp_rewards') and self.amp_rewards is not None:
+            # Add safety checks for AMP rewards
+            if torch.any(torch.isnan(self.amp_rewards)) or torch.any(torch.isinf(self.amp_rewards)):
+                print("Warning: NaN or Inf detected in AMP rewards, using task rewards only")
+                return
+            
+            # Scale discriminator rewards
+            amp_reward_scale = getattr(self.cfg.rewards.scales, 'amp', 0.5)
+            scaled_disc_rewards = amp_reward_scale * self.amp_rewards
+            
+            # Clamp scaled discriminator rewards to prevent extreme values
+            scaled_disc_rewards = torch.clamp(scaled_disc_rewards, min=-10.0, max=10.0)
+            
+            # Debug: Print AMP reward statistics
+            if self._debug_step_count % 100 == 0:  # Print every 100 steps
+                amp_mean = self.amp_rewards.mean().item()
+                amp_min = self.amp_rewards.min().item()
+                amp_max = self.amp_rewards.max().item()
+                scaled_mean = scaled_disc_rewards.mean().item()
+                print(f"AMP rewards - Mean: {amp_mean:.3f}, Min: {amp_min:.3f}, Max: {amp_max:.3f}")
+                print(f"Scaled AMP rewards - Mean: {scaled_mean:.3f}, Scale: {amp_reward_scale}")
+            
+            # Get task reward lerp parameter
+            task_reward_lerp = getattr(self.cfg.rewards, 'task_reward_lerp', 0.5)
+            
+            # Linear interpolation between discriminator and task rewards
+            # r = (1.0 - task_reward_lerp) * disc_r + task_reward_lerp * task_r
+            blended_rewards = (1.0 - task_reward_lerp) * scaled_disc_rewards + task_reward_lerp * task_rewards
+            
+            # Debug: Print blended reward statistics
+            if self._debug_step_count % 100 == 0:  # Print every 100 steps
+                blended_mean = blended_rewards.mean().item()
+                blended_min = blended_rewards.min().item()
+                blended_max = blended_rewards.max().item()
+                print(f"Blended rewards - Mean: {blended_mean:.3f}, Min: {blended_min:.3f}, Max: {blended_max:.3f}")
+                print(f"Lerp factor: {task_reward_lerp} (task weight)")
+            
+            self.rew_buf = blended_rewards
+            
+            # Final safety clamp on total rewards
+            self.rew_buf = torch.clamp(self.rew_buf, min=-100.0, max=100.0)
+        else:
+            # If no AMP rewards available, use task rewards only
+            if self._debug_step_count % 100 == 0:  # Print every 100 steps
+                print("No AMP rewards available, using task rewards only")
+            pass

@@ -121,8 +121,46 @@ class OnPolicyRunner:
 
                     # Add agent observations to replay buffer for AMP
                     if hasattr(self.alg, 'replay_buffer') and self.alg.replay_buffer is not None:
-                        # Store only the first 68 dims (raw obs) for AMP
-                        self.alg.replay_buffer.add(obs.cpu().numpy()[:, :68])
+                        # For AMP, store AMP observations (119-dim) instead of standard observations
+                        if hasattr(self.env, 'amp_obs_buf'):
+                            self.alg.replay_buffer.add(self.env.amp_obs_buf.cpu().numpy())
+                        else:
+                            # Fallback: if no AMP obs, skip adding to replay buffer
+                            pass
+                    
+                    # Compute discriminator rewards if using AMP
+                    if hasattr(self.alg, 'discriminator') and self.alg.discriminator is not None:
+                        with torch.no_grad():
+                            # Get AMP observations from environment (already computed)
+                            if hasattr(self.env, 'amp_obs_buf'):
+                                amp_obs = self.env.amp_obs_buf
+                                disc_logits = self.alg.discriminator(amp_obs)
+                                # Convert discriminator logits to rewards using DeepMimic formula
+                                # DeepMimic discriminator reward formula: r = 1.0 - 0.25 * (1.0 - logits)^2
+                                # IMPORTANT: Discriminator outputs raw logits, not sigmoid probabilities!
+                                # The DeepMimic formula is designed to work directly with logit outputs
+                                disc_logits_squeezed = disc_logits.squeeze(-1)  # Raw logits from discriminator
+                                
+                                # Debug logging
+                                logit_min, logit_max = disc_logits_squeezed.min().item(), disc_logits_squeezed.max().item()
+                                if it % 10 == 0:  # Log every 10 iterations
+                                    print(f"Disc logits range: [{logit_min:.3f}, {logit_max:.3f}]")
+                                
+                                # Apply the DeepMimic formula to raw logits
+                                disc_rewards = 1.0 - 0.25 * torch.square(1.0 - disc_logits_squeezed)
+                                disc_rewards = torch.clamp(disc_rewards, min=0.0)  # Ensure non-negative
+                                
+                                # Apply DeepMimic RewardScale parameter (2.0)
+                                reward_scale = 2.0  # DeepMimic RewardScale parameter
+                                disc_rewards = disc_rewards * reward_scale
+                                
+                                # Debug logging for rewards
+                                reward_min, reward_max = disc_rewards.min().item(), disc_rewards.max().item()
+                                if it % 10 == 0:  # Log every 10 iterations
+                                    print(f"Disc rewards range: [{reward_min:.3f}, {reward_max:.3f}]")
+                                # Set AMP rewards in environment
+                                if hasattr(self.env, 'set_amp_rewards'):
+                                    self.env.set_amp_rewards(disc_rewards)
                     
                     if self.log_dir is not None:
                         # Book keeping

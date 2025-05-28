@@ -101,81 +101,91 @@ class AMP(PPO):
                     value_loss = (returns_batch - value_batch).pow(2).mean()
 
                 # AMP: Discriminator update
-                demo_obs_t, demo_obs_tp1 = self.demo_buffer.sample_pair(obs_batch.shape[0])  # implement sample_pair for consecutive demo frames
-                agent_obs_t, agent_obs_tp1 = self.replay_buffer.sample_pair(obs_batch.shape[0])  # implement sample_pair for consecutive agent frames
-
-                # --- Compose 119-dim AMP obs using actual reference state ---
-                def make_amp_obs_pair(s_t, s_tp1):
-                    # Ensure all tensors are on the same device
-                    if s_tp1.device != s_t.device:
-                        s_tp1 = s_tp1.to(s_t.device)
-                    # Slicing for s_t
-                    base_ang_vel = s_t[:, 0:3]
-                    projected_gravity = s_t[:, 3:6]
-                    commands = s_t[:, 6:9]
-                    dof_pos = s_t[:, 9:28]
-                    dof_vel = s_t[:, 28:47]
-                    actions = s_t[:, 47:66] if s_t.shape[1] >= 66 else torch.zeros((s_t.shape[0], 19), device=s_t.device, dtype=s_t.dtype)
-                    base_lin_vel = s_t[:, 66:69] if s_t.shape[1] >= 69 else torch.zeros((s_t.shape[0], 3), device=s_t.device, dtype=s_t.dtype)
-                    # Slicing for s_tp1
-                    ref_dof_pos = s_tp1[:, 9:28]
-                    ref_dof_vel = s_tp1[:, 28:47]
-                    ref_base_lin_vel = s_tp1[:, 66:69] if s_tp1.shape[1] >= 69 else torch.zeros((s_tp1.shape[0], 3), device=s_tp1.device, dtype=s_tp1.dtype)
-                    ref_base_ang_vel = s_tp1[:, 0:3]
-                    dof_diff = ref_dof_pos - dof_pos
-                    dof_vel_diff = ref_dof_vel - dof_vel
-                    diff_local_root_vel = ref_base_lin_vel - base_lin_vel
-                    diff_local_root_ang_vel = ref_base_ang_vel - base_ang_vel
-                    # --- Compute tan-norm (body orientation difference) ---
-                    if s_t is s_tp1:
-                        tan_norm = torch.zeros((s_t.shape[0], 8), device=s_t.device, dtype=s_t.dtype)
-                    else:
-                        if s_t.shape[1] >= 73 and s_tp1.shape[1] >= 73:
-                            root_quat = s_t[:, -4:]
-                            ref_body_rot = s_tp1[:, -4:]
-                            import legged_gym.utils.torch_utils as torch_utils
-                            heading_inv_rot = torch_utils.calc_heading_quat_inv(root_quat)
-                            heading_rot = torch_utils.calc_heading_quat(root_quat)
-                            diff_global_body_rot = torch_utils.quat_mul(ref_body_rot, torch_utils.quat_conjugate(root_quat))
-                            diff_local_body_rot_flat = torch_utils.quat_mul(
-                                torch_utils.quat_mul(heading_inv_rot, diff_global_body_rot), heading_rot)
-                            tan_norm = torch_utils.quat_to_tan_norm(diff_local_body_rot_flat)
-                        else:
-                            tan_norm = torch.zeros((s_t.shape[0], 8), device=s_t.device, dtype=s_t.dtype)
-                    obs = torch.cat([
-                        base_ang_vel, projected_gravity, commands, dof_pos, dof_vel, actions, base_lin_vel,
-                        tan_norm, diff_local_root_vel, diff_local_root_ang_vel, dof_diff, dof_vel_diff
-                    ], dim=-1)
-                    return obs
-
-                # For demo: use consecutive demo frames
-                demo_obs_full = make_amp_obs_pair(demo_obs_t, demo_obs_tp1)
-                # For agent: use consecutive agent frames
-                agent_obs_full = make_amp_obs_pair(agent_obs_t, agent_obs_tp1)
+                # Sample from demo buffer and replay buffer
+                demo_obs = self.demo_buffer.sample(obs_batch.shape[0])  # already constructed AMP observations
+                agent_obs = self.replay_buffer.sample(obs_batch.shape[0])  # already constructed AMP observations
+                
                 # Ensure both are on the same device as the discriminator
-                demo_obs_full = demo_obs_full.to(self.device)
-                agent_obs_full = agent_obs_full.to(self.device)
+                demo_obs = demo_obs.to(self.device)
+                agent_obs = agent_obs.to(self.device)
 
-                disc_demo_logits = self.discriminator(demo_obs_full)
-                disc_agent_logits = self.discriminator(agent_obs_full)
-                bce = nn.BCEWithLogitsLoss()
-                disc_loss = 0.5 * (bce(disc_agent_logits, torch.zeros_like(disc_agent_logits)) +
-                                   bce(disc_demo_logits, torch.ones_like(disc_demo_logits)))
+                disc_demo_logits = self.discriminator(demo_obs)  # Now outputs raw logits
+                disc_agent_logits = self.discriminator(agent_obs)  # Now outputs raw logits
+                
+                # Add safety checks for extreme values
+                if torch.any(torch.isnan(disc_demo_logits)) or torch.any(torch.isnan(disc_agent_logits)):
+                    print("Warning: NaN detected in discriminator outputs, skipping update")
+                    continue
+                
+                # Clamp logits to prevent extreme values
+                disc_demo_logits = torch.clamp(disc_demo_logits, min=-10.0, max=10.0)
+                disc_agent_logits = torch.clamp(disc_agent_logits, min=-10.0, max=10.0)
+                
+                # Use DeepMimic's custom discriminator loss (NOT BCEWithLogitsLoss)
+                # Expert data should have logits close to +1, agent data should have logits close to -1
+                # DeepMimic loss: expert_loss = 0.5 * (logits - 1)^2, agent_loss = 0.5 * (logits + 1)^2
+                disc_loss_expert = 0.5 * torch.mean(torch.square(disc_demo_logits - 1.0))
+                disc_loss_agent = 0.5 * torch.mean(torch.square(disc_agent_logits + 1.0))
+                disc_loss = disc_loss_expert + disc_loss_agent
+                
+                # Add discriminator regularization terms (following DeepMimic)
+                # L2 regularization on discriminator output weights
+                disc_weight_decay = 0.0005  # DiscWeightDecay from DeepMimic
+                disc_logit_reg_weight = 0.05  # DiscLogitRegWeight from DeepMimic
+                
+                # L2 regularization on discriminator weights
+                disc_weight_loss = 0.0
+                for param in self.discriminator.parameters():
+                    disc_weight_loss += torch.sum(param ** 2)
+                disc_loss += disc_weight_decay * disc_weight_loss
+                
+                # L2 regularization specifically on output layer (logit regularization)
+                output_weight = self.discriminator.output_layer.weight
+                disc_loss += disc_logit_reg_weight * torch.sum(output_weight ** 2)
+                
+                # Clamp discriminator loss to prevent instability
+                disc_loss = torch.clamp(disc_loss, max=10.0)
 
-                # Total loss
-                loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean() + self.disc_coef * disc_loss
+                # Total PPO loss (without discriminator - train separately)
+                loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
 
-                # Update actor-critic
+                # Update actor-critic first
                 self.optimizer.zero_grad()
-                loss.backward(retain_graph=True)
+                loss.backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
 
-                # Update discriminator
-                self.optimizer_disc.zero_grad()
-                disc_loss.backward()
-                nn.utils.clip_grad_norm_(self.discriminator.parameters(), self.max_grad_norm)
-                self.optimizer_disc.step()
+                # Update discriminator separately (multiple steps like DeepMimic)
+                for _ in range(2):  # DiscStepsPerBatch: 2 from DeepMimic
+                    # Re-sample for discriminator update
+                    demo_obs_disc = self.demo_buffer.sample(obs_batch.shape[0])
+                    agent_obs_disc = self.replay_buffer.sample(obs_batch.shape[0])
+                    demo_obs_disc = demo_obs_disc.to(self.device)
+                    agent_obs_disc = agent_obs_disc.to(self.device)
+                    
+                    disc_demo_logits_new = self.discriminator(demo_obs_disc)
+                    disc_agent_logits_new = self.discriminator(agent_obs_disc)
+                    
+                    # DeepMimic discriminator loss
+                    disc_loss_expert_new = 0.5 * torch.mean(torch.square(disc_demo_logits_new - 1.0))
+                    disc_loss_agent_new = 0.5 * torch.mean(torch.square(disc_agent_logits_new + 1.0))
+                    disc_loss_new = disc_loss_expert_new + disc_loss_agent_new
+                    
+                    # Add regularization
+                    disc_weight_loss_new = 0.0
+                    for param in self.discriminator.parameters():
+                        disc_weight_loss_new += torch.sum(param ** 2)
+                    disc_loss_new += disc_weight_decay * disc_weight_loss_new
+                    
+                    output_weight_new = self.discriminator.output_layer.weight
+                    disc_loss_new += disc_logit_reg_weight * torch.sum(output_weight_new ** 2)
+                    
+                    disc_loss_new = torch.clamp(disc_loss_new, max=10.0)
+                    
+                    self.optimizer_disc.zero_grad()
+                    disc_loss_new.backward()
+                    nn.utils.clip_grad_norm_(self.discriminator.parameters(), self.max_grad_norm)
+                    self.optimizer_disc.step()
 
                 mean_value_loss += value_loss.item()
                 mean_surrogate_loss += surrogate_loss.item()
