@@ -25,6 +25,10 @@ class H1AMP(H1Mimic):
         self.prev_base_lin_vel = torch.zeros_like(self.base_lin_vel)
         self.prev_base_ang_vel = torch.zeros_like(self.base_ang_vel)
         
+        # Initialize discriminator reward storage
+        self.disc_rewards = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.disc_coef = getattr(cfg.rewards.scales, 'disc_coef', 0.5)  # Default coefficient for discriminator reward
+        
     def _parse_cfg(self, cfg):
         super()._parse_cfg(cfg)
         self.cfg.motion.resample_motions_for_envs_interval = np.ceil(self.cfg.motion.resample_motions_for_envs_interval_s / self.dt)
@@ -334,18 +338,6 @@ class H1AMP(H1Mimic):
         # Store task rewards before modification
         task_rewards = self.rew_buf.clone()
         
-        # Debug: Print task reward statistics
-        if hasattr(self, '_debug_step_count'):
-            self._debug_step_count += 1
-        else:
-            self._debug_step_count = 0
-        
-        if self._debug_step_count % 100 == 0:  # Print every 100 steps
-            task_mean = task_rewards.mean().item()
-            task_min = task_rewards.min().item()
-            task_max = task_rewards.max().item()
-            print(f"Task rewards - Mean: {task_mean:.3f}, Min: {task_min:.3f}, Max: {task_max:.3f}")
-        
         # Get AMP (discriminator) rewards if available
         if hasattr(self, 'amp_rewards') and self.amp_rewards is not None:
             # Add safety checks for AMP rewards
@@ -360,15 +352,6 @@ class H1AMP(H1Mimic):
             # Clamp scaled discriminator rewards to prevent extreme values
             scaled_disc_rewards = torch.clamp(scaled_disc_rewards, min=-10.0, max=10.0)
             
-            # Debug: Print AMP reward statistics
-            if self._debug_step_count % 100 == 0:  # Print every 100 steps
-                amp_mean = self.amp_rewards.mean().item()
-                amp_min = self.amp_rewards.min().item()
-                amp_max = self.amp_rewards.max().item()
-                scaled_mean = scaled_disc_rewards.mean().item()
-                print(f"AMP rewards - Mean: {amp_mean:.3f}, Min: {amp_min:.3f}, Max: {amp_max:.3f}")
-                print(f"Scaled AMP rewards - Mean: {scaled_mean:.3f}, Scale: {amp_reward_scale}")
-            
             # Get task reward lerp parameter
             task_reward_lerp = getattr(self.cfg.rewards, 'task_reward_lerp', 0.5)
             
@@ -376,20 +359,25 @@ class H1AMP(H1Mimic):
             # r = (1.0 - task_reward_lerp) * disc_r + task_reward_lerp * task_r
             blended_rewards = (1.0 - task_reward_lerp) * scaled_disc_rewards + task_reward_lerp * task_rewards
             
-            # Debug: Print blended reward statistics
-            if self._debug_step_count % 100 == 0:  # Print every 100 steps
-                blended_mean = blended_rewards.mean().item()
-                blended_min = blended_rewards.min().item()
-                blended_max = blended_rewards.max().item()
-                print(f"Blended rewards - Mean: {blended_mean:.3f}, Min: {blended_min:.3f}, Max: {blended_max:.3f}")
-                print(f"Lerp factor: {task_reward_lerp} (task weight)")
+            # Store discriminator rewards for external access
+            self.disc_rewards = scaled_disc_rewards
             
+            # Update the reward buffer with blended rewards
             self.rew_buf = blended_rewards
             
             # Final safety clamp on total rewards
             self.rew_buf = torch.clamp(self.rew_buf, min=-100.0, max=100.0)
         else:
             # If no AMP rewards available, use task rewards only
-            if self._debug_step_count % 100 == 0:  # Print every 100 steps
-                print("No AMP rewards available, using task rewards only")
+            self.disc_rewards = torch.zeros_like(task_rewards)
             pass
+
+    def get_discriminator_rewards(self):
+        """Return the current discriminator rewards for external use"""
+        return self.disc_rewards.clone()
+
+    def set_discriminator_rewards(self, disc_rewards):
+        """Set discriminator rewards from external source"""
+        if disc_rewards.shape != self.disc_rewards.shape:
+            raise ValueError(f"Expected discriminator rewards shape {self.disc_rewards.shape}, got {disc_rewards.shape}")
+        self.disc_rewards = disc_rewards.to(self.device)
