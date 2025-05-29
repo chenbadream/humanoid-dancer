@@ -98,6 +98,12 @@ or
 python legged_gym/scripts/play.py --load_run {run_name} --no-headless --num_envs 1 env-cfg:h1-mimic-cfg --env-cfg.viewer.debug-viz train-cfg:h1-mimic-ppo-cfg
 ```
 
+or
+
+```
+python legged_gym/scripts/play.py --load_run {run_name} --no-headless --num_envs 1 env-cfg:h1-amp-cfg --env-cfg.viewer.debug-viz train-cfg:h1-amp-cfg-ppo
+```
+
 If you enable the GUI, you can use the following keys for interaction:
 
 | Keyboard | Function |
