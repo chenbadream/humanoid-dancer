@@ -14,6 +14,8 @@ import torch
 
 from legged_gym.scripts.train import Args
 from legged_gym.envs.h1.h1_amp_config import H1AMPCfg, H1AMPCfgPPO
+from rsl_rl.modules.discriminator import Discriminator
+from rsl_rl.modules.buffers import ReplayBuffer, DemoBuffer
 
 
 def play(args: Args):
@@ -36,9 +38,26 @@ def play(args: Args):
     # prepare environment
     env, _ = task_registry.make_env(args=args, env_cfg=env_cfg)
     obs = env.get_observations()
+    
+    # Check if we're using AMP algorithm and create necessary components
+    discriminator = None
+    demo_buffer = None
+    replay_buffer = None
+    
+    if train_cfg.runner.algorithm_class_name == 'AMP':
+        # Create discriminator for AMP inference (same as training)
+        discriminator = Discriminator(input_dim=119)  # AMP observations are 119-dim
+        
+        # Create empty buffers for inference (not used during play but required for AMP initialization)
+        demo_buffer = DemoBuffer(torch.zeros(1, 119))  # Dummy data
+        replay_buffer = ReplayBuffer(119, capacity=1000)  # Small capacity for inference
+    
     # load policy
     train_cfg.runner.resume = True
-    ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, args=args, train_cfg=train_cfg)
+    ppo_runner, train_cfg = task_registry.make_alg_runner(
+        env=env, args=args, train_cfg=train_cfg, 
+        discriminator=discriminator, demo_buffer=demo_buffer, replay_buffer=replay_buffer
+    )
     policy = ppo_runner.get_inference_policy(device=env.device)
 
     for i in range(10*int(env.max_episode_length)):
