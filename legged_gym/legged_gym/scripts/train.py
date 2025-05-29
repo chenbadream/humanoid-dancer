@@ -237,7 +237,7 @@ def generate_amp_demo_obs(args, env_cfg, device):
 def train(args: Args):
     env, env_cfg = task_registry.make_env(args=args, env_cfg=args.env_cfg)
     obs_dim = env.num_obs
-    discriminator = Discriminator(input_dim=119)  # AMP observations are 119-dim
+    discriminator = Discriminator(input_dim=119)  # AMP observations are 119-dim (already contain both timesteps)
 
     # Generate AMP demonstration data using the motion library  
     # These are already constructed as 119-dim AMP observations

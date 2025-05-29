@@ -65,6 +65,12 @@ python legged_gym/scripts/train.py --max-iterations 10000 env-cfg:h1-cfg train-c
 python legged_gym/scripts/train.py --max-iterations 100000 env-cfg:h1-mimic-cfg --env-cfg.motion.motion-file resources/motions/h1/amass_phc_filtered.pkl train-cfg:h1-mimic-ppo-cfg
 ```
 
+- Train a amp imitation policy for H1:
+
+```
+python legged_gym/scripts/train.py --max-iterations 100000 env-cfg:h1-amp-cfg --env-cfg.motion.motion-file resources/motions/h1/amass_phc_filtered.pkl train-cfg:h1-amp-cfg-ppo
+```
+
 
 When running these policies, a `logs` folder will appear, containing task-specific subfolders like `h1` or `h1-mimic`. These are timestamped folders storing training logs and model checkpoints.
 

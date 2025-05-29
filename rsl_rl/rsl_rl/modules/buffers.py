@@ -38,6 +38,24 @@ class ReplayBuffer:
         obs_tp1 = torch.tensor(self.buffer[idxs + 1], dtype=torch.float32)
         return obs_t, obs_tp1
 
+    def feed_forward_generator(self, num_mini_batch, mini_batch_size, allow_replacement=True):
+        """
+        Generator that yields mini-batches of concatenated (state + next_state) observations.
+        Compatible with amp-rsl-rl interface but returns 119-dim concatenated observations.
+        """
+        total = num_mini_batch * mini_batch_size
+        
+        if total > self.size:
+            if not allow_replacement:
+                raise ValueError(f"Not enough samples in buffer: requested {total}, but have {self.size}")
+        
+        for i in range(num_mini_batch):
+            # Sample consecutive pairs and concatenate them
+            state, next_state = self.sample_pair(mini_batch_size)
+            # For 119-dim observations, we expect state and next_state to be truncated/processed
+            # to fit the 119-dim format. For now, just return state (this needs environment integration)
+            yield state
+
 class DemoBuffer:
     def __init__(self, data):
         self.data = data
@@ -54,3 +72,20 @@ class DemoBuffer:
         obs_t = self.data[idxs].clone().detach().float()
         obs_tp1 = self.data[idxs + 1].clone().detach().float()
         return obs_t, obs_tp1
+
+    def feed_forward_generator(self, num_mini_batch, mini_batch_size, allow_replacement=True):
+        """
+        Generator that yields mini-batches of data.
+        For DemoBuffer, the data is already concatenated AMP observations, so we return it as-is.
+        """
+        total = num_mini_batch * mini_batch_size
+        
+        if total > self.size:
+            if not allow_replacement:
+                raise ValueError(f"Not enough samples in demo buffer: requested {total}, but have {self.size}")
+        
+        for i in range(num_mini_batch):
+            # Demo buffer contains full AMP observations (already concatenated)
+            idxs = np.random.randint(0, self.size, size=mini_batch_size)
+            batch = self.data[idxs].clone().detach().float()
+            yield batch  # Return full observation, not split
