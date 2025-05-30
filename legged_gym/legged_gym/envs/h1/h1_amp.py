@@ -12,10 +12,12 @@ from .h1_mimic import H1Mimic
 
 class H1AMP(H1Mimic):
     def __init__(self, cfg, sim_params, physics_engine, sim_device, headless):
+        # Set amp_obs_dim BEFORE calling super().__init__() since _get_noise_scale_vec() needs it
+        self.amp_obs_dim = 105  # Updated AMP observation dimension for humanoid
+        
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
         
         # AMP-specific initialization
-        self.amp_obs_dim = 119  # Standard AMP observation dimension for humanoid
         self.amp_obs_buf = torch.zeros(self.num_envs, self.amp_obs_dim, dtype=torch.float, device=self.device, requires_grad=False)
         
         # Store previous states for AMP observation construction
@@ -44,17 +46,20 @@ class H1AMP(H1Mimic):
         self.reset_buf |= self.time_out_buf
 
     def compute_observations(self):
-        # Call parent implementation from H1Mimic
-        super().compute_observations()
-        
+        # For H1AMP, we use the AMP observations as the main observations
         # Compute AMP observations using consecutive timesteps (DeepMimic approach)
-        self.amp_obs_buf = self._compute_amp_observations()
+        self.obs_buf = self._compute_amp_observations()
+        self.amp_obs_buf = self.obs_buf.clone()
+        
+        # Add noise if needed
+        if self.add_noise:
+            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
         
         # Update previous states for next timestep
         self._update_previous_states()
         
     def _compute_amp_observations(self):
-        """Compute 119-dimensional AMP observations for discriminator using consecutive timesteps"""
+        """Compute 105-dimensional AMP observations for discriminator using consecutive timesteps"""
         B = self.num_envs
         
         # Current state (pose at time t)
@@ -87,7 +92,8 @@ class H1AMP(H1Mimic):
         curr_joint_pos = curr_dof_pos - self.default_dof_pos
         
         # Previous pose features  
-        prev_root_h = self.root_states[:, 2:3]  # Note: this is current, we'd need to store previous root height
+        # TODO: Store previous root height properly - for now using current as approximation
+        prev_root_h = self.root_states[:, 2:3]  # Should ideally use previous root height
         prev_heading_rot = torch_utils.calc_heading_quat(prev_base_quat)
         prev_heading_rot_inv = torch_utils.calc_heading_quat_inv(prev_base_quat)
         
@@ -106,7 +112,7 @@ class H1AMP(H1Mimic):
         prev_local_lin_vel = torch_utils.quat_rotate_inverse(prev_heading_rot, prev_base_lin_vel)
         prev_local_ang_vel = torch_utils.quat_rotate_inverse(prev_heading_rot, prev_base_ang_vel)
         
-        # Concatenate all features to build 119-dimensional AMP observation
+        # Concatenate all features to build 105-dimensional AMP observation
         # Following DeepMimic structure: poses (current + previous) + velocities (current + previous)
         amp_obs = torch.cat([
             # Current pose: root height (1) + root orientation (6) + joint positions (19) = 26
@@ -129,9 +135,8 @@ class H1AMP(H1Mimic):
             prev_local_ang_vel * self.obs_scales.ang_vel,      # 3
             prev_dof_vel * self.obs_scales.dof_vel,            # 19
             
-            # Additional features to reach 119 dimensions
+            # Additional features
             self.projected_gravity,                             # 3
-            torch.zeros(B, 14, device=self.device),            # 14 padding to reach 119 total
         ], dim=-1)
         
         return amp_obs
@@ -381,3 +386,52 @@ class H1AMP(H1Mimic):
         if disc_rewards.shape != self.disc_rewards.shape:
             raise ValueError(f"Expected discriminator rewards shape {self.disc_rewards.shape}, got {disc_rewards.shape}")
         self.disc_rewards = disc_rewards.to(self.device)
+
+    def _get_noise_scale_vec(self, cfg):
+        """ Sets a vector used to scale the noise added to the AMP observations.
+            [NOTE]: Must be adapted when changing the AMP observations structure
+
+        Args:
+            cfg (Dict): Environment config file
+
+        Returns:
+            [torch.Tensor]: Vector of scales used to multiply a uniform distribution in [-1, 1]
+        """
+        # Create noise vector with AMP observation dimensions (105)
+        noise_vec = torch.zeros(self.amp_obs_dim, dtype=torch.float, device=self.device, requires_grad=False)
+        self.add_noise = self.cfg.noise.add_noise
+        noise_scales = self.cfg.noise.noise_scales
+        noise_level = self.cfg.noise.noise_level
+        
+        # AMP observation structure (105 dims):
+        # Current pose: height(1) + rotation(6) + joints(19) = 26
+        # Previous pose: height(1) + rotation(6) + joints(19) = 26  
+        # Current velocity: lin_vel(3) + ang_vel(3) + joint_vel(19) = 25
+        # Previous velocity: lin_vel(3) + ang_vel(3) + joint_vel(19) = 25
+        # Gravity: (3)
+        # Total: 26 + 26 + 25 + 25 + 3 = 105
+        
+        # Current pose
+        noise_vec[0:1] = 0.0  # root height - no noise
+        noise_vec[1:7] = 0.0  # root rotation (6D) - no noise  
+        noise_vec[7:26] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos  # joint positions (19)
+        
+        # Previous pose  
+        noise_vec[26:27] = 0.0  # prev root height - no noise
+        noise_vec[27:33] = 0.0  # prev root rotation (6D) - no noise
+        noise_vec[33:52] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos  # prev joint positions (19)
+        
+        # Current velocity
+        noise_vec[52:55] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel  # root linear velocity (3)
+        noise_vec[55:58] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel  # root angular velocity (3)
+        noise_vec[58:77] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel  # joint velocities (19)
+        
+        # Previous velocity
+        noise_vec[77:80] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel  # prev root linear velocity (3)
+        noise_vec[80:83] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel  # prev root angular velocity (3)
+        noise_vec[83:102] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel  # prev joint velocities (19)
+        
+        # Gravity
+        noise_vec[102:105] = noise_scales.gravity * noise_level  # gravity (3)
+        
+        return noise_vec

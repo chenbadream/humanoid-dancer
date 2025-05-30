@@ -47,7 +47,7 @@ class Motion:
 @dataclass
 class Env(h1_config.Env):
     num_privileged_obs: Optional[int] = None
-    num_observations: int = 119
+    num_observations: int = 105
 
 @dataclass
 class Rewards(MimicRewards):

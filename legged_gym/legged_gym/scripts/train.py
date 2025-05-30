@@ -120,92 +120,87 @@ def generate_amp_demo_obs(args, env_cfg, device):
     default_dof_pos = torch.tensor(default_dof_pos, dtype=torch.float32, device=device)
     
     def build_amp_obs_from_motion_states(state_t, state_t1, obs_scales, default_dof_pos):
-        """Build AMP observation from two consecutive motion states (following DeepMimic BuildAMPObs)."""
+        """Build AMP observation from two consecutive motion states matching H1AMP._compute_amp_observations format."""
+        # Import torch_utils to use the same functions as h1_amp.py
+        from legged_gym.utils import torch_utils
+        
         # Current state (t)
-        root_pos_t = state_t['root_pos']  # [1, 3]
-        root_quat_t = state_t['rb_rot'][:, 0]  # [1, 4] - root rotation 
-        root_vel_t = state_t['root_vel']  # [1, 3]
-        root_ang_vel_t = state_t['root_ang_vel']  # [1, 3]
-        dof_pos_t = (state_t['dof_pos'] - default_dof_pos.unsqueeze(0)) * obs_scales.dof_pos  # [1, 19]
-        dof_vel_t = state_t['dof_vel'] * obs_scales.dof_vel  # [1, 19]
+        curr_root_pos = state_t['root_pos']  # [1, 3]
+        curr_base_quat = state_t['rb_rot'][:, 0]  # [1, 4] - root rotation 
+        curr_base_lin_vel = state_t['root_vel']  # [1, 3]
+        curr_base_ang_vel = state_t['root_ang_vel']  # [1, 3]
+        curr_dof_pos = state_t['dof_pos']  # [1, 19]
+        curr_dof_vel = state_t['dof_vel']  # [1, 19]
         
         # Previous state (t-1)
-        root_pos_t1 = state_t1['root_pos']  # [1, 3]
-        root_quat_t1 = state_t1['rb_rot'][:, 0]  # [1, 4] - root rotation
-        root_vel_t1 = state_t1['root_vel']  # [1, 3]
-        root_ang_vel_t1 = state_t1['root_ang_vel']  # [1, 3]
-        dof_pos_t1 = (state_t1['dof_pos'] - default_dof_pos.unsqueeze(0)) * obs_scales.dof_pos  # [1, 19]
-        dof_vel_t1 = state_t1['dof_vel'] * obs_scales.dof_vel  # [1, 19]
+        prev_root_pos = state_t1['root_pos']  # [1, 3]
+        prev_base_quat = state_t1['rb_rot'][:, 0]  # [1, 4] - root rotation
+        prev_base_lin_vel = state_t1['root_vel']  # [1, 3]
+        prev_base_ang_vel = state_t1['root_ang_vel']  # [1, 3]
+        prev_dof_pos = state_t1['dof_pos']  # [1, 19]
+        prev_dof_vel = state_t1['dof_vel']  # [1, 19]
         
-        # Build AMP observation: [pos_t, quat_t, vel_t, angvel_t, dofpos_t, dofvel_t, 
-        #                         pos_t1, quat_t1, vel_t1, angvel_t1, dofpos_t1, dofvel_t1]
-        # Total: 3+4+3+3+19+19 + 3+4+3+3+19+19 = 51 + 51 = 102... 
-        # Wait, that's not 119. Let me check what AMP obs should contain
+        # Current pose features (using heading-relative coordinates like h1_amp.py)
+        curr_root_h = curr_root_pos[:, 2:3]  # Root height
+        curr_heading_rot = torch_utils.calc_heading_quat(curr_base_quat)
+        curr_heading_rot_inv = torch_utils.calc_heading_quat_inv(curr_base_quat)
         
-        # Following DeepMimic: root pose, root velocity, joint positions, joint velocities for two timesteps
-        # Let's use root height, root rotation as 6D (tan-norm), linear vel, angular vel, dof pos, dof vel
-        # for both timesteps
+        # Transform current orientation to heading-relative
+        curr_local_rot = torch_utils.quat_mul(curr_heading_rot_inv, curr_base_quat)
+        curr_rot_tan_norm = torch_utils.quat_to_tan_norm(curr_local_rot).view(1, -1)
         
-        # Convert quaternions to 6D representation (tan-norm)
-        def quat_to_tan_norm(quat):
-            # quat is [w, x, y, z], convert to rotation matrix first 6 elements
-            w, x, y, z = quat[..., 0], quat[..., 1], quat[..., 2], quat[..., 3]
-            # Convert to rotation matrix and take first two columns (6 elements)
-            xx, yy, zz = x*x, y*y, z*z
-            xy, xz, yz = x*y, x*z, y*z
-            wx, wy, wz = w*x, w*y, w*z
+        # Current joint positions (relative to default)
+        curr_joint_pos = curr_dof_pos - default_dof_pos.unsqueeze(0)
+        
+        # Previous pose features
+        prev_root_h = prev_root_pos[:, 2:3]  # Root height
+        prev_heading_rot = torch_utils.calc_heading_quat(prev_base_quat)
+        prev_heading_rot_inv = torch_utils.calc_heading_quat_inv(prev_base_quat)
+        
+        # Transform previous orientation to heading-relative
+        prev_local_rot = torch_utils.quat_mul(prev_heading_rot_inv, prev_base_quat)
+        prev_rot_tan_norm = torch_utils.quat_to_tan_norm(prev_local_rot).view(1, -1)
+        
+        # Previous joint positions (relative to default)
+        prev_joint_pos = prev_dof_pos - default_dof_pos.unsqueeze(0)
+        
+        # Current velocity features (transform to local coordinates)
+        curr_local_lin_vel = torch_utils.quat_rotate_inverse(curr_heading_rot, curr_base_lin_vel)
+        curr_local_ang_vel = torch_utils.quat_rotate_inverse(curr_heading_rot, curr_base_ang_vel)
+        
+        # Previous velocity features (transform to local coordinates)
+        prev_local_lin_vel = torch_utils.quat_rotate_inverse(prev_heading_rot, prev_base_lin_vel)
+        prev_local_ang_vel = torch_utils.quat_rotate_inverse(prev_heading_rot, prev_base_ang_vel)
+        
+        # Gravity vector (pointing down)
+        gravity = torch.tensor([[0.0, 0.0, -1.0]], device=curr_root_pos.device)
+        
+        # Concatenate all features to build 105-dimensional AMP observation
+        # Following exact same structure as H1AMP._compute_amp_observations
+        amp_obs = torch.cat([
+            # Current pose: root height (1) + root orientation (6) + joint positions (19) = 26
+            curr_root_h,                                         # 1
+            curr_rot_tan_norm,                                  # 6 (2*3 for tan_norm representation)
+            curr_joint_pos * obs_scales.dof_pos,               # 19
             
-            rot_mat = torch.stack([
-                1 - 2*(yy + zz), 2*(xy - wz), 2*(xz + wy),
-                2*(xy + wz), 1 - 2*(xx + zz), 2*(yz - wx)
-            ], dim=-1)  # First 6 elements of rotation matrix
-            return rot_mat
-        
-        root_rot_6d_t = quat_to_tan_norm(root_quat_t)  # [1, 6]
-        root_rot_6d_t1 = quat_to_tan_norm(root_quat_t1)  # [1, 6]
-        
-        # AMP observation for DeepMimic: 
-        # root_height(1) + root_rot_6d(6) + root_vel(3) + root_ang_vel(3) + dof_pos(19) + dof_vel(19) = 51 per timestep
-        # For 2 timesteps: 51 * 2 = 102... still not 119
-        
-        # Let me check what the actual env AMP observation size should be
-        # Based on H1 robot: it might include more joint info or body positions
-        # For now, let's use root height + 6D rotation + velocities + joint data for both timesteps
-        # And add some padding or body parts if needed to reach 119
-        
-        root_height_t = root_pos_t[:, 2:3]  # [1, 1] - Z coordinate 
-        root_height_t1 = root_pos_t1[:, 2:3]  # [1, 1]
-        
-        # Current timestep: height(1) + rot_6d(6) + lin_vel(3) + ang_vel(3) + dof_pos(19) + dof_vel(19) = 51
-        obs_t = torch.cat([
-            root_height_t,      # 1
-            root_rot_6d_t,      # 6  
-            root_vel_t,         # 3
-            root_ang_vel_t,     # 3
-            dof_pos_t,          # 19
-            dof_vel_t,          # 19
-        ], dim=-1)  # Total: 51
-        
-        # Previous timestep: same format
-        obs_t1 = torch.cat([
-            root_height_t1,     # 1
-            root_rot_6d_t1,     # 6
-            root_vel_t1,        # 3  
-            root_ang_vel_t1,    # 3
-            dof_pos_t1,         # 19
-            dof_vel_t1,         # 19
-        ], dim=-1)  # Total: 51
-        
-        # Combine both timesteps
-        amp_obs = torch.cat([obs_t, obs_t1], dim=-1)  # Total: 102
-        
-        # If we need 119 dimensions, we need 17 more. Let's add some additional features:
-        # Maybe body part positions or additional velocity info
-        # For now, let's pad with zeros to reach 119 (this is a temporary fix)
-        padding_size = 119 - amp_obs.shape[-1]
-        if padding_size > 0:
-            padding = torch.zeros(amp_obs.shape[0], padding_size, device=amp_obs.device)
-            amp_obs = torch.cat([amp_obs, padding], dim=-1)
+            # Previous pose: root height (1) + root orientation (6) + joint positions (19) = 26  
+            prev_root_h,                                         # 1
+            prev_rot_tan_norm,                                  # 6
+            prev_joint_pos * obs_scales.dof_pos,               # 19
+            
+            # Current velocity: root linear vel (3) + root angular vel (3) + joint velocities (19) = 25
+            curr_local_lin_vel * obs_scales.lin_vel,           # 3
+            curr_local_ang_vel * obs_scales.ang_vel,           # 3
+            curr_dof_vel * obs_scales.dof_vel,                 # 19
+            
+            # Previous velocity: root linear vel (3) + root angular vel (3) + joint velocities (19) = 25
+            prev_local_lin_vel * obs_scales.lin_vel,           # 3
+            prev_local_ang_vel * obs_scales.ang_vel,           # 3
+            prev_dof_vel * obs_scales.dof_vel,                 # 19
+            
+            # Additional features
+            gravity,                                            # 3
+        ], dim=-1)
         
         return amp_obs
     
@@ -237,15 +232,15 @@ def generate_amp_demo_obs(args, env_cfg, device):
 def train(args: Args):
     env, env_cfg = task_registry.make_env(args=args, env_cfg=args.env_cfg)
     obs_dim = env.num_obs
-    discriminator = Discriminator(input_dim=119)  # AMP observations are 119-dim (already contain both timesteps)
+    discriminator = Discriminator(input_dim=obs_dim)  # AMP observations are 105-dim (updated from 119)
 
     # Generate AMP demonstration data using the motion library  
-    # These are already constructed as 119-dim AMP observations
+    # These are now constructed as 105-dim AMP observations
     demo_data = generate_amp_demo_obs(args, env_cfg, args.rl_device)
     demo_buffer = DemoBuffer(demo_data)
     
-    # Replay buffer will store AMP observations (119-dim) generated by the environment
-    replay_buffer = ReplayBuffer(119, capacity=1000000)  # AMP obs size
+    # Replay buffer will store AMP observations (105-dim) generated by the environment
+    replay_buffer = ReplayBuffer(obs_dim, capacity=1000000)  # AMP obs size updated
     
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, args=args, train_cfg=args.train_cfg, discriminator=discriminator, demo_buffer=demo_buffer, replay_buffer=replay_buffer)
     ppo_runner.learn(num_learning_iterations=train_cfg.runner.max_iterations, init_at_random_ep_len=False)
