@@ -71,6 +71,12 @@ def get_opt(opt_path, device, hml_type=None):
         opt.joints_num = 21
         opt.dim_pose = 251
         opt.max_motion_length = 196
+    elif opt.dataset_name == 'h1':
+        # H1 dataset configuration is loaded from the config file
+        # The paths should already be set in the opt file
+        opt.joints_num = 22  # Same as t2m
+        opt.dim_pose = 263   # Same as t2m 
+        opt.max_motion_length = 196
     else:
         raise KeyError('Dataset not recognized')
 

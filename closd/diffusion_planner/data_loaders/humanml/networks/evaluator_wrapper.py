@@ -1,7 +1,7 @@
 from closd.diffusion_planner.data_loaders.humanml.networks.modules import *
 from closd.diffusion_planner.data_loaders.humanml.utils.word_vectorizer import POS_enumerator
 from os.path import join as pjoin
-# from closd.utils import hf_handler  # Commented out for now
+from closd.utils import hf_handler
 
 def build_models(opt):
     movement_enc = MovementConvEncoder(opt.dim_pose-4, opt.dim_movement_enc_hidden, opt.dim_movement_latent)
@@ -94,7 +94,7 @@ class EvaluatorModelWrapper(object):
 
 # our version
 def build_evaluators(opt):
-    cache_path = None  # hf_handler.get_dependencies() - commented out for now
+    cache_path = hf_handler.get_dependencies()
     movement_enc = MovementConvEncoder(opt['dim_pose']-4, opt['dim_movement_enc_hidden'], opt['dim_movement_latent'])
     text_enc = TextEncoderBiGRUCo(word_size=opt['dim_word'],
                                   pos_size=opt['dim_pos_ohot'],

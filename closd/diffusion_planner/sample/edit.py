@@ -34,7 +34,7 @@ def main():
     name = os.path.basename(os.path.dirname(args.model_path))
     niter = os.path.basename(args.model_path).replace('model', '').replace('.pt', '')
     max_frames = 196 if args.dataset in ['kit', 'humanml'] else 60
-    fps = 12.5 if args.dataset == 'kit' else 20
+    fps = 12.5 if args.dataset == 'kit' else 30 if args.dataset == 'h1' else 20
     dist_util.setup_dist(args.device)
     if out_path == '':
         out_path = os.path.join(os.path.dirname(args.model_path),

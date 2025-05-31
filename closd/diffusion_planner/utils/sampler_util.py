@@ -20,7 +20,7 @@ class ClassifierFreeSampleModel(nn.Module):
 
     def forward(self, x, timesteps, y=None):
         cond_mode = self.model.cond_mode
-        assert cond_mode in ['text', 'action', 'no_cond']
+        assert cond_mode in ['text', 'action']
         y_uncond = deepcopy(y)
         if 'text' in self.guidance_type:
             y_uncond['text_uncond'] = True

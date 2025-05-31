@@ -81,8 +81,8 @@ def t2m_prefix_collate(batch, pred_len):
     adapted_batch = [{
         'inp': torch.tensor(b[4].T).float().unsqueeze(1)[..., -pred_len:], # [seqlen, J] -> [J, 1, seqlen]
         'prefix': torch.tensor(b[4].T).float().unsqueeze(1)[..., :-pred_len],
-        # 'text': b[2], #b[0]['caption']
-        # 'tokens': b[6],
+        'text': b[2], #b[0]['caption']
+        'tokens': b[6],
         'lengths': pred_len,  # b[5],
         'key': b[7] if len(b) > 7 else None,
     } for b in batch]

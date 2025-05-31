@@ -1,0 +1,628 @@
+!!python/object/new:easydict.EasyDict
+dictitems:
+  add_proj: false
+  debug: false
+  device: cuda
+  device_id: 0
+  device_type: cuda
+  dimp_eval: false
+  env: &id030 !!python/object/new:easydict.EasyDict
+    dictitems:
+      asset_type: mesh
+      auto_pmcp: false
+      auto_pmcp_soft: true
+      aux_coefficient: 0.3
+      bench_asset_density: 1000.0
+      contact_bodies: &id001
+      - L_Knee
+      - L_Ankle
+      - L_Toe
+      - R_Knee
+      - R_Ankle
+      - R_Toe
+      - Torso
+      - Chest
+      - L_Thorax
+      - L_Shoulder
+      - L_Elbow
+      - L_Wrist
+      - L_Hand
+      - R_Thorax
+      - R_Shoulder
+      - R_Elbow
+      - R_Wrist
+      - R_Hand
+      controlFrequencyInv: 2
+      control_mode: isaac_pd
+      cycle_motion: false
+      cycle_motion_xp: false
+      debug: &id002 !!python/object/new:easydict.EasyDict
+        dictitems:
+          no_aux_obs: false
+          no_terrain: false
+        state:
+          no_aux_obs: false
+          no_terrain: false
+      dimp: &id003 !!python/object/new:easydict.EasyDict
+        dictitems:
+          cfg_param: 5
+          context_switch_prob: 0.0
+          debug_hml: false
+          dump_mdm: false
+          handle_text_distrib: true
+          limit_context: null
+          max_saved_hml_episodes: 50000
+          model_path: /home/dcor/sigalraab/train_outputs/rl/from_guy/PrefixCompHor_DiffusionSteps_10_PredLen_40_new/model000200000.pt
+          open_loop_hook: false
+          planning_horizon: 40
+          planning_horizon_multiplyer: 1
+          prefix_crop_size: 16
+          prompt: A person is walking.
+          recon_frame_start: 0
+          recon_frame_stop: -1
+          recon_param: 10000.0
+          recon_step_start: -1
+          recon_step_stop: 2
+          save_hml_episodes: true
+          save_hml_episodes_dir: ''
+          save_name_suffix: recover2
+          traj_guidance: false
+        state:
+          cfg_param: 5
+          context_switch_prob: 0.0
+          debug_hml: false
+          dump_mdm: false
+          handle_text_distrib: true
+          limit_context: null
+          max_saved_hml_episodes: 50000
+          model_path: /home/dcor/sigalraab/train_outputs/rl/from_guy/PrefixCompHor_DiffusionSteps_10_PredLen_40_new/model000200000.pt
+          open_loop_hook: false
+          planning_horizon: 40
+          planning_horizon_multiplyer: 1
+          prefix_crop_size: 16
+          prompt: A person is walking.
+          recon_frame_start: 0
+          recon_frame_stop: -1
+          recon_param: 10000.0
+          recon_step_start: -1
+          recon_step_stop: 2
+          save_hml_episodes: true
+          save_hml_episodes_dir: ''
+          save_name_suffix: recover2
+          traj_guidance: false
+      disable_adaptnet: true
+      done_dist: 0.3
+      enableEarlyTermination: true
+      enableTaskObs: true
+      enable_debug_vis: false
+      enable_transitions: true
+      env_spacing: 5
+      episode_length: 300
+      fut_tracks: false
+      hard_negative: false
+      hybridInitProb: 0.5
+      imitator: HumanoidIm
+      is_flag_run: false
+      key_bodies: &id004
+      - R_Ankle
+      - L_Ankle
+      - R_Wrist
+      - L_Wrist
+      kp_scale: 1
+      local_root_obs: true
+      min_length: 5
+      models: output/HumanoidIm/PhcSinglePrimForever/Humanoid.pth
+      motion_file: sample_data/amass_isaac_standing_upright_slim.pkl
+      notes: ''
+      numAMPObsSteps: 10
+      numActions: 69
+      numObservations: 574
+      numTrajSamples: 3
+      num_envs: 4096
+      obs_v: 7
+      plane: &id005 !!python/object/new:easydict.EasyDict
+        dictitems:
+          dynamicFriction: 1.0
+          restitution: 0.0
+          staticFriction: 1.0
+        state:
+          dynamicFriction: 1.0
+          restitution: 0.0
+          staticFriction: 1.0
+      power_reward: true
+      power_scale: 1.0
+      project_name: PHC
+      reachBodyName: Pelvis
+      reset_bodies: &id006
+      - Pelvis
+      - L_Hip
+      - L_Knee
+      - R_Hip
+      - R_Knee
+      - Torso
+      - Spine
+      - Chest
+      - Neck
+      - Head
+      - L_Thorax
+      - L_Shoulder
+      - L_Elbow
+      - L_Wrist
+      - L_Hand
+      - R_Thorax
+      - R_Shoulder
+      - R_Elbow
+      - R_Wrist
+      - R_Hand
+      root_height_obs: true
+      seed: -1
+      self_obs_v: 1
+      shape_resampling_interval: 100000000000000000
+      show_markers: true
+      stateInit: Random
+      strikeBodyNames: &id007
+      - L_Hand
+      strike_asset_density: 200.0
+      support_phc_markers: true
+      tarChangeStepsMax: 100
+      tarChangeStepsMin: 50
+      tarDistMax: 1.0
+      tarHeightMax: 0.95
+      tarHeightMin: 0.9
+      tarSpeed: 1.0
+      task: HumanoidAdaptNetT2M
+      terminationDistance: 0.25
+      terminationHeight: 0.15
+      terrain: &id008 !!python/object/new:easydict.EasyDict
+        dictitems:
+          height_safety_gap: 0.0
+        state:
+          height_safety_gap: 0.0
+      trajSampleTimestepInv: 3
+    state:
+      asset_type: mesh
+      auto_pmcp: false
+      auto_pmcp_soft: true
+      aux_coefficient: 0.3
+      bench_asset_density: 1000.0
+      contact_bodies: *id001
+      controlFrequencyInv: 2
+      control_mode: isaac_pd
+      cycle_motion: false
+      cycle_motion_xp: false
+      debug: *id002
+      dimp: *id003
+      disable_adaptnet: true
+      done_dist: 0.3
+      enableEarlyTermination: true
+      enableTaskObs: true
+      enable_debug_vis: false
+      enable_transitions: true
+      env_spacing: 5
+      episode_length: 300
+      fut_tracks: false
+      hard_negative: false
+      hybridInitProb: 0.5
+      imitator: HumanoidIm
+      is_flag_run: false
+      key_bodies: *id004
+      kp_scale: 1
+      local_root_obs: true
+      min_length: 5
+      models: output/HumanoidIm/PhcSinglePrimForever/Humanoid.pth
+      motion_file: sample_data/amass_isaac_standing_upright_slim.pkl
+      notes: ''
+      numAMPObsSteps: 10
+      numActions: 69
+      numObservations: 574
+      numTrajSamples: 3
+      num_envs: 4096
+      obs_v: 7
+      plane: *id005
+      power_reward: true
+      power_scale: 1.0
+      project_name: PHC
+      reachBodyName: Pelvis
+      reset_bodies: *id006
+      root_height_obs: true
+      seed: -1
+      self_obs_v: 1
+      shape_resampling_interval: 100000000000000000
+      show_markers: true
+      stateInit: Random
+      strikeBodyNames: *id007
+      strike_asset_density: 200.0
+      support_phc_markers: true
+      tarChangeStepsMax: 100
+      tarChangeStepsMin: 50
+      tarDistMax: 1.0
+      tarHeightMax: 0.95
+      tarHeightMin: 0.9
+      tarSpeed: 1.0
+      task: HumanoidAdaptNetT2M
+      terminationDistance: 0.25
+      terminationHeight: 0.15
+      terrain: *id008
+      trajSampleTimestepInv: 3
+  epoch: 61500
+  exp_name: T2mFinetune
+  follow: true
+  has_eval: true
+  headless: true
+  horovod: false
+  im_eval: false
+  learning: &id031 !!python/object/new:easydict.EasyDict
+    dictitems:
+      params: &id026 !!python/object/new:easydict.EasyDict
+        dictitems:
+          algo: &id022 !!python/object/new:easydict.EasyDict
+            dictitems:
+              name: im_amp
+            state:
+              name: im_amp
+          config: &id023 !!python/object/new:easydict.EasyDict
+            dictitems:
+              amp_batch_size: 512
+              amp_minibatch_size: 4096
+              amp_obs_demo_buffer_size: 200000
+              amp_replay_buffer_size: 200000
+              amp_replay_keep_prob: 0.01
+              bounds_loss_coef: 10
+              clip_value: false
+              critic_coef: 5
+              dimp_eval: false
+              disc_coef: 5
+              disc_grad_penalty: 5
+              disc_logit_reg: 0.01
+              disc_reward_scale: 2
+              disc_reward_w: 0.5
+              disc_weight_decay: 0.0001
+              e_clip: 0.2
+              entropy_coef: 0.0
+              env_name: rlgpu
+              gamma: 0.99
+              grad_norm: 50.0
+              horizon_length: 32
+              learning_rate: 2.0e-05
+              lr_schedule: constant
+              max_epochs: 10000000
+              mini_epochs: 6
+              minibatch_size: 16384
+              mixed_precision: false
+              multi_gpu: false
+              name: Humanoid
+              network_path: output/HumanoidIm/T2mFinetune
+              normalize_advantage: true
+              normalize_amp_input: true
+              normalize_input: true
+              normalize_value: true
+              num_actors: 4096
+              player: &id009 !!python/object/new:easydict.EasyDict
+                dictitems:
+                  games_num: 50000000
+                  print_stats: false
+                state:
+                  games_num: 50000000
+                  print_stats: false
+              ppo: true
+              print_stats: false
+              reward_shaper: &id010 !!python/object/new:easydict.EasyDict
+                dictitems:
+                  scale_value: 1
+                state:
+                  scale_value: 1
+              save_best_after: 100
+              save_frequency: 500
+              save_intermediate: true
+              score_to_win: 20000
+              task_reward_w: 0.5
+              tau: 0.95
+              train_dir: output/HumanoidIm/T2mFinetune
+              truncate_grads: true
+            state:
+              amp_batch_size: 512
+              amp_minibatch_size: 4096
+              amp_obs_demo_buffer_size: 200000
+              amp_replay_buffer_size: 200000
+              amp_replay_keep_prob: 0.01
+              bounds_loss_coef: 10
+              clip_value: false
+              critic_coef: 5
+              dimp_eval: false
+              disc_coef: 5
+              disc_grad_penalty: 5
+              disc_logit_reg: 0.01
+              disc_reward_scale: 2
+              disc_reward_w: 0.5
+              disc_weight_decay: 0.0001
+              e_clip: 0.2
+              entropy_coef: 0.0
+              env_name: rlgpu
+              gamma: 0.99
+              grad_norm: 50.0
+              horizon_length: 32
+              learning_rate: 2.0e-05
+              lr_schedule: constant
+              max_epochs: 10000000
+              mini_epochs: 6
+              minibatch_size: 16384
+              mixed_precision: false
+              multi_gpu: false
+              name: Humanoid
+              network_path: output/HumanoidIm/T2mFinetune
+              normalize_advantage: true
+              normalize_amp_input: true
+              normalize_input: true
+              normalize_value: true
+              num_actors: 4096
+              player: *id009
+              ppo: true
+              print_stats: false
+              reward_shaper: *id010
+              save_best_after: 100
+              save_frequency: 500
+              save_intermediate: true
+              score_to_win: 20000
+              task_reward_w: 0.5
+              tau: 0.95
+              train_dir: output/HumanoidIm/T2mFinetune
+              truncate_grads: true
+          load_checkpoint: true
+          load_path: output/HumanoidIm/T2mFinetune/Humanoid_00061500.pth
+          model: &id024 !!python/object/new:easydict.EasyDict
+            dictitems:
+              name: amp
+            state:
+              name: amp
+          network: &id025 !!python/object/new:easydict.EasyDict
+            dictitems:
+              adapt_actor: true
+              adapt_critic: false
+              disc: &id019 !!python/object/new:easydict.EasyDict
+                dictitems:
+                  activation: relu
+                  initializer: &id011 !!python/object/new:easydict.EasyDict
+                    dictitems:
+                      name: default
+                    state:
+                      name: default
+                  units: &id012
+                  - 1024
+                  - 512
+                state:
+                  activation: relu
+                  initializer: *id011
+                  units: *id012
+              mlp: &id020 !!python/object/new:easydict.EasyDict
+                dictitems:
+                  activation: silu
+                  d2rl: false
+                  initializer: &id013 !!python/object/new:easydict.EasyDict
+                    dictitems:
+                      name: default
+                    state:
+                      name: default
+                  regularizer: &id014 !!python/object/new:easydict.EasyDict
+                    dictitems:
+                      name: None
+                    state:
+                      name: None
+                  split_after_layer: 0
+                  units: &id015
+                  - 2048
+                  - 1536
+                  - 1024
+                  - 1024
+                  - 512
+                  - 512
+                state:
+                  activation: silu
+                  d2rl: false
+                  initializer: *id013
+                  regularizer: *id014
+                  split_after_layer: 0
+                  units: *id015
+              name: amp_adapt
+              separate: true
+              space: &id021 !!python/object/new:easydict.EasyDict
+                dictitems:
+                  continuous: &id018 !!python/object/new:easydict.EasyDict
+                    dictitems:
+                      fixed_sigma: true
+                      learn_sigma: false
+                      mu_activation: None
+                      mu_init: &id016 !!python/object/new:easydict.EasyDict
+                        dictitems:
+                          name: default
+                        state:
+                          name: default
+                      sigma_activation: None
+                      sigma_init: &id017 !!python/object/new:easydict.EasyDict
+                        dictitems:
+                          name: const_initializer
+                          val: -2.9
+                        state:
+                          name: const_initializer
+                          val: -2.9
+                    state:
+                      fixed_sigma: true
+                      learn_sigma: false
+                      mu_activation: None
+                      mu_init: *id016
+                      sigma_activation: None
+                      sigma_init: *id017
+                state:
+                  continuous: *id018
+            state:
+              adapt_actor: true
+              adapt_critic: false
+              disc: *id019
+              mlp: *id020
+              name: amp_adapt
+              separate: true
+              space: *id021
+          seed: 0
+        state:
+          algo: *id022
+          config: *id023
+          load_checkpoint: true
+          load_path: output/HumanoidIm/T2mFinetune/Humanoid_00061500.pth
+          model: *id024
+          network: *id025
+          seed: 0
+    state:
+      params: *id026
+  metadata: false
+  no_log: false
+  no_virtual_display: true
+  notes: Default Notes
+  num_threads: 64
+  output_path: output/HumanoidIm/T2mFinetune
+  play: true
+  project_name: PHC
+  real_traj: false
+  render_o3d: false
+  resume_str: null
+  rl_device: cuda:0
+  robot: &id032 !!python/object/new:easydict.EasyDict
+    dictitems:
+      asset: &id027 !!python/object/new:easydict.EasyDict
+        dictitems:
+          assetFileName: mjcf/smpl_humanoid.xml
+          assetRoot: /
+        state:
+          assetFileName: mjcf/smpl_humanoid.xml
+          assetRoot: /
+      bias_offset: false
+      big_ankle: true
+      box_body: true
+      freeze_hand: false
+      freeze_toe: false
+      has_dof_subset: true
+      has_jt_limit: false
+      has_mesh: false
+      has_self_collision: true
+      has_shape_obs: false
+      has_shape_obs_disc: false
+      has_shape_variation: false
+      has_smpl_pd_offset: false
+      has_upright_start: true
+      humanoid_type: smpl
+      masterfoot: false
+      motion_sym_loss: false
+      real_weight: true
+      real_weight_porpotion_boxes: true
+      real_weight_porpotion_capsules: true
+      remove_toe: false
+      sym_loss_coef: 1
+    state:
+      asset: *id027
+      bias_offset: false
+      big_ankle: true
+      box_body: true
+      freeze_hand: false
+      freeze_toe: false
+      has_dof_subset: true
+      has_jt_limit: false
+      has_mesh: false
+      has_self_collision: true
+      has_shape_obs: false
+      has_shape_obs_disc: false
+      has_shape_variation: false
+      has_smpl_pd_offset: false
+      has_upright_start: true
+      humanoid_type: smpl
+      masterfoot: false
+      motion_sym_loss: false
+      real_weight: true
+      real_weight_porpotion_boxes: true
+      real_weight_porpotion_capsules: true
+      remove_toe: false
+      sym_loss_coef: 1
+  seed: -1
+  server_mode: false
+  sim: &id033 !!python/object/new:easydict.EasyDict
+    dictitems:
+      flex: &id028 !!python/object/new:easydict.EasyDict
+        dictitems:
+          num_inner_iterations: 10
+          warm_start: 0.25
+        state:
+          num_inner_iterations: 10
+          warm_start: 0.25
+      graphics_device_id: 0
+      physx: &id029 !!python/object/new:easydict.EasyDict
+        dictitems:
+          bounce_threshold_velocity: 0.2
+          contact_offset: 0.02
+          default_buffer_size_multiplier: 10.0
+          max_depenetration_velocity: 10.0
+          num_position_iterations: 4
+          num_threads: 4
+          num_velocity_iterations: 0
+          rest_offset: 0.0
+          solver_type: 1
+        state:
+          bounce_threshold_velocity: 0.2
+          contact_offset: 0.02
+          default_buffer_size_multiplier: 10.0
+          max_depenetration_velocity: 10.0
+          num_position_iterations: 4
+          num_threads: 4
+          num_velocity_iterations: 0
+          rest_offset: 0.0
+          solver_type: 1
+      pipeline: gpu
+      sim_device: cuda:0
+      slices: 0
+      subscenes: 0
+      substeps: 2
+      use_flex: false
+    state:
+      flex: *id028
+      graphics_device_id: 0
+      physx: *id029
+      pipeline: gpu
+      sim_device: cuda:0
+      slices: 0
+      subscenes: 0
+      substeps: 2
+      use_flex: false
+  test: true
+  torch_deterministic: false
+  train: false
+state:
+  add_proj: false
+  debug: false
+  device: cuda
+  device_id: 0
+  device_type: cuda
+  dimp_eval: false
+  env: *id030
+  epoch: 61500
+  exp_name: T2mFinetune
+  follow: true
+  has_eval: true
+  headless: true
+  horovod: false
+  im_eval: false
+  learning: *id031
+  metadata: false
+  no_log: false
+  no_virtual_display: true
+  notes: Default Notes
+  num_threads: 64
+  output_path: output/HumanoidIm/T2mFinetune
+  play: true
+  project_name: PHC
+  real_traj: false
+  render_o3d: false
+  resume_str: null
+  rl_device: cuda:0
+  robot: *id032
+  seed: -1
+  server_mode: false
+  sim: *id033
+  test: true
+  torch_deterministic: false
+  train: false

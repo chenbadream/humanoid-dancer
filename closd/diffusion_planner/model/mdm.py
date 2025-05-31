@@ -2,8 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# import clip  # Disabled for prefix conditioning
-# from closd.diffusion_planner.model.BERT.BERT_encoder import load_bert  # Disabled for prefix conditioning
+# import clip
+from closd.diffusion_planner.model.BERT.BERT_encoder import load_bert
 from closd.diffusion_planner.utils.misc import WeightedSum
 
 normal_repr = torch.Tensor.__repr__
@@ -105,31 +105,30 @@ class MDM(nn.Module):
         self.embed_timestep = TimestepEmbedder(self.latent_dim, self.sequence_pos_encoder)
 
         if self.cond_mode != 'no_cond':
-            # Text conditioning disabled for prefix conditioning
-            # if 'text' in self.cond_mode:
-            #     # We support CLIP encoder and DistilBERT
-            #     print('EMBED TEXT')
-            #     
-            #     self.text_encoder_type = kargs.get('text_encoder_type', 'clip')
-            #     
-            #     if self.text_encoder_type == "clip":
-            #         print('Loading CLIP...')
-            #         self.clip_version = clip_version
-            #         self.clip_model = self.load_and_freeze_clip(clip_version)
-            #         self.encode_text = self.clip_encode_text
-            #     elif self.text_encoder_type == 'bert':
-            #         assert self.arch == 'trans_dec'
-            #         # assert self.emb_trans_dec == False # passing just the time embed so it's fine
-            #         print("Loading BERT...")
-            #         # bert_model_path = 'model/BERT/distilbert-base-uncased'
-            #         bert_model_path = 'distilbert/distilbert-base-uncased'
-            #         self.clip_model = load_bert(bert_model_path)
-            #         self.encode_text = self.bert_encode_text
-            #         self.clip_dim = 768
-            #     else:
-            #         raise ValueError('We only support [CLIP, BERT] text encoders') 
-            #     
-            #     self.embed_text = nn.Linear(self.clip_dim, self.latent_dim)
+            if 'text' in self.cond_mode:
+                # We support CLIP encoder and DistilBERT
+                print('EMBED TEXT')
+                
+                self.text_encoder_type = kargs.get('text_encoder_type', 'clip')
+                
+                if self.text_encoder_type == "clip":
+                    print('Loading CLIP...')
+                    self.clip_version = clip_version
+                    self.clip_model = self.load_and_freeze_clip(clip_version)
+                    self.encode_text = self.clip_encode_text
+                elif self.text_encoder_type == 'bert':
+                    assert self.arch == 'trans_dec'
+                    # assert self.emb_trans_dec == False # passing just the time embed so it's fine
+                    print("Loading BERT...")
+                    # bert_model_path = 'model/BERT/distilbert-base-uncased'
+                    bert_model_path = 'distilbert/distilbert-base-uncased'
+                    self.clip_model = load_bert(bert_model_path)
+                    self.encode_text = self.bert_encode_text
+                    self.clip_dim = 768
+                else:
+                    raise ValueError('We only support [CLIP, BERT] text encoders') 
+                
+                self.embed_text = nn.Linear(self.clip_dim, self.latent_dim)
                 
             if 'action' in self.cond_mode:
                 self.embed_action = EmbedAction(self.num_actions, self.latent_dim)
@@ -141,19 +140,18 @@ class MDM(nn.Module):
     def parameters_wo_clip(self):
         return [p for name, p in self.named_parameters() if not name.startswith('clip_model.')]
 
-    # Text encoding methods disabled for prefix conditioning
-    # def load_and_freeze_clip(self, clip_version):
-    #     clip_model, clip_preprocess = clip.load(clip_version, device='cpu',
-    #                                             jit=False)  # Must set jit=False for training
-    #     clip.model.convert_weights(
-    #         clip_model)  # Actually this line is unnecessary since clip by default already on float16
-    # 
-    #     # Freeze CLIP weights
-    #     clip_model.eval()
-    #     for p in clip_model.parameters():
-    #         p.requires_grad = False
-    # 
-    #     return clip_model
+    def load_and_freeze_clip(self, clip_version):
+        clip_model, clip_preprocess = clip.load(clip_version, device='cpu',
+                                                jit=False)  # Must set jit=False for training
+        clip.model.convert_weights(
+            clip_model)  # Actually this line is unnecessary since clip by default already on float16
+
+        # Freeze CLIP weights
+        clip_model.eval()
+        for p in clip_model.parameters():
+            p.requires_grad = False
+
+        return clip_model
 
     def mask_cond(self, cond, force_mask=False):
         seq_len, bs, d = cond.shape
@@ -165,32 +163,31 @@ class MDM(nn.Module):
         else:
             return cond
 
-    # Text encoding methods disabled for prefix conditioning
-    # def clip_encode_text(self, raw_text):
-    #     # raw_text - list (batch_size length) of strings with input text prompts
-    #     device = next(self.parameters()).device
-    #     max_text_len = 20 if self.dataset in ['humanml', 'kit'] else None  # Specific hardcoding for humanml dataset
-    #     if max_text_len is not None:
-    #         default_context_length = 77
-    #         context_length = max_text_len + 2 # start_token + 20 + end_token
-    #         assert context_length < default_context_length
-    #         texts = clip.tokenize(raw_text, context_length=context_length, truncate=True).to(device) # [bs, context_length] # if n_tokens > context_length -> will truncate
-    #         # print('texts', texts.shape)
-    #         zero_pad = torch.zeros([texts.shape[0], default_context_length-context_length], dtype=texts.dtype, device=texts.device)
-    #         texts = torch.cat([texts, zero_pad], dim=1)
-    #         # print('texts after pad', texts.shape, texts)
-    #     else:
-    #         texts = clip.tokenize(raw_text, truncate=True).to(device) # [bs, context_length] # if n_tokens > 77 -> will truncate
-    #     return self.clip_model.encode_text(texts).float().unsqueeze(0)
-    # 
-    # def bert_encode_text(self, raw_text):
-    #     # enc_text = self.clip_model(raw_text)
-    #     # enc_text = enc_text.permute(1, 0, 2)
-    #     # return enc_text
-    #     enc_text, mask = self.clip_model(raw_text)  # self.clip_model.get_last_hidden_state(raw_text, return_mask=True)  # mask: False means no token there
-    #     enc_text = enc_text.permute(1, 0, 2)
-    #     mask = ~mask  # mask: True means no token there, we invert since the meaning of mask for transformer is inverted  https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html
-    #     return enc_text, mask
+    def clip_encode_text(self, raw_text):
+        # raw_text - list (batch_size length) of strings with input text prompts
+        device = next(self.parameters()).device
+        max_text_len = 20 if self.dataset in ['humanml', 'kit'] else None  # Specific hardcoding for humanml dataset
+        if max_text_len is not None:
+            default_context_length = 77
+            context_length = max_text_len + 2 # start_token + 20 + end_token
+            assert context_length < default_context_length
+            texts = clip.tokenize(raw_text, context_length=context_length, truncate=True).to(device) # [bs, context_length] # if n_tokens > context_length -> will truncate
+            # print('texts', texts.shape)
+            zero_pad = torch.zeros([texts.shape[0], default_context_length-context_length], dtype=texts.dtype, device=texts.device)
+            texts = torch.cat([texts, zero_pad], dim=1)
+            # print('texts after pad', texts.shape, texts)
+        else:
+            texts = clip.tokenize(raw_text, truncate=True).to(device) # [bs, context_length] # if n_tokens > 77 -> will truncate
+        return self.clip_model.encode_text(texts).float().unsqueeze(0)
+    
+    def bert_encode_text(self, raw_text):
+        # enc_text = self.clip_model(raw_text)
+        # enc_text = enc_text.permute(1, 0, 2)
+        # return enc_text
+        enc_text, mask = self.clip_model(raw_text)  # self.clip_model.get_last_hidden_state(raw_text, return_mask=True)  # mask: False means no token there
+        enc_text = enc_text.permute(1, 0, 2)
+        mask = ~mask  # mask: True means no token there, we invert since the meaning of mask for transformer is inverted  https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html
+        return enc_text, mask
 
     def forward(self, x, timesteps, y=None):
         """
@@ -221,30 +218,24 @@ class MDM(nn.Module):
             x = torch.cat([x, keyframes_ch], dim=1)   # [batch_size, njoints+1, nfeats, max_frames]
 
         force_mask = y.get('text_uncond', False)
-        # Text conditioning disabled for prefix conditioning
-        # if 'text' in self.cond_mode:
-        #     if 'text_embed' in y.keys():  # caching option
-        #         enc_text = y['text_embed']
-        #     else:
-        #         enc_text = self.encode_text(y['text'])
-        #     if type(enc_text) == tuple:
-        #         enc_text, text_mask = enc_text
-        #         if text_mask.shape[0] == 1 and bs > 1:  # casting mask for the single-prompt-for-all case
-        #             text_mask = torch.repeat_interleave(text_mask, bs, dim=0)
-        #     if self.emb_before_mask:
-        #         text_emb = self.mask_cond(self.embed_text(enc_text), force_mask=force_mask)
-        #     else:  # default
-        #         text_emb = self.embed_text(self.mask_cond(enc_text, force_mask=force_mask))  # casting mask for the single-prompt-for-all case
-        #     if self.emb_policy == 'add':
-        #         emb = text_emb + time_emb
-        #     else:
-        #         emb = torch.cat([time_emb, text_emb], dim=0)
-        #         text_mask = torch.cat([torch.zeros_like(text_mask[:, 0:1]), text_mask], dim=1)
-        
-        # For prefix conditioning, we only use time embedding
-        emb = time_emb
-        text_mask = None
-        
+        if 'text' in self.cond_mode:
+            if 'text_embed' in y.keys():  # caching option
+                enc_text = y['text_embed']
+            else:
+                enc_text = self.encode_text(y['text'])
+            if type(enc_text) == tuple:
+                enc_text, text_mask = enc_text
+                if text_mask.shape[0] == 1 and bs > 1:  # casting mask for the single-prompt-for-all case
+                    text_mask = torch.repeat_interleave(text_mask, bs, dim=0)
+            if self.emb_before_mask:
+                text_emb = self.mask_cond(self.embed_text(enc_text), force_mask=force_mask)
+            else:  # default
+                text_emb = self.embed_text(self.mask_cond(enc_text, force_mask=force_mask))  # casting mask for the single-prompt-for-all case
+            if self.emb_policy == 'add':
+                emb = text_emb + time_emb
+            else:
+                emb = torch.cat([time_emb, text_emb], dim=0)
+                text_mask = torch.cat([torch.zeros_like(text_mask[:, 0:1]), text_mask], dim=1)
         if 'action' in self.cond_mode:
             action_emb = self.embed_action(y['action'])
             emb += self.mask_cond(action_emb, force_mask=force_mask)
@@ -262,19 +253,8 @@ class MDM(nn.Module):
         frames_mask = None
         is_valid_mask = y['mask'].shape[-1] > 1  # Don't use mask with the generate script
         if self.mask_frames and is_valid_mask:
-            # Use actual sequence length (first dimension of x, not last dimension)
-            actual_seq_len = x.shape[0]  # x is [seq_len, batch_size, feature_dim]
-            
-            # Handle case where mask length doesn't match actual sequence length
-            if y['mask'].shape[-1] != actual_seq_len:
-                # For prefix completion, create mask for the actual sequence length
-                # All frames in the actual sequence should be valid
-                frames_mask = torch.zeros((bs, actual_seq_len), dtype=torch.bool, device=x.device)
-            else:
-                frames_mask = torch.logical_not(y['mask'][..., :actual_seq_len].squeeze(1).squeeze(1)).to(device=x.device)
-            
-            # Add step mask for architectures that prepend time embedding
-            if self.arch == 'trans_enc' or (self.arch == 'trans_dec' and self.emb_trans_dec):
+            frames_mask = torch.logical_not(y['mask'][..., :x.shape[0]].squeeze(1).squeeze(1)).to(device=x.device)
+            if self.emb_trans_dec or self.arch == 'trans_enc':
                 step_mask = torch.zeros((bs, 1), dtype=torch.bool, device=x.device)
                 frames_mask = torch.cat([step_mask, frames_mask], dim=1)
 
@@ -291,16 +271,12 @@ class MDM(nn.Module):
                 xseq = x
             xseq = self.sequence_pos_encoder(xseq)  # [seqlen+1, bs, d]
 
-            # For prefix conditioning, we don't use text encoder type
-            output = self.seqTransDecoder(tgt=xseq, memory=emb, tgt_key_padding_mask=frames_mask)
-            
-            # Original text-based code commented out:
-            # if self.text_encoder_type == 'clip':
-            #     output = self.seqTransDecoder(tgt=xseq, memory=emb, tgt_key_padding_mask=frames_mask)
-            # elif self.text_encoder_type == 'bert':
-            #     output = self.seqTransDecoder(tgt=xseq, memory=emb, memory_key_padding_mask=text_mask, tgt_key_padding_mask=frames_mask)  # Rotem's bug fix
-            # else:
-            #     raise ValueError()
+            if self.text_encoder_type == 'clip':
+                output = self.seqTransDecoder(tgt=xseq, memory=emb, tgt_key_padding_mask=frames_mask)
+            elif self.text_encoder_type == 'bert':
+                output = self.seqTransDecoder(tgt=xseq, memory=emb, memory_key_padding_mask=text_mask, tgt_key_padding_mask=frames_mask)  # Rotem's bug fix
+            else:
+                raise ValueError()
 
             if self.emb_trans_dec:
                 output = output[1:] # [seqlen, bs, d]
@@ -312,9 +288,8 @@ class MDM(nn.Module):
 
         # Extract completed suffix
         if self.is_prefix_comp:
-            # Only extract the predicted frames, not all remaining frames
-            output = output[self.context_len:self.context_len + self.pred_len]
-            y['mask'] = y['mask'][..., self.context_len:self.context_len + self.pred_len]
+            output = output[self.context_len:]
+            y['mask'] = y['mask'][..., self.context_len:]
         
         output = self.output_process(output)  # [bs, njoints, nfeats, nframes]
         return output

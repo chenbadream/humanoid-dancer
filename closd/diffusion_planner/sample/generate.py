@@ -28,11 +28,11 @@ def main(args=None):
         args = generate_args()
     fixseed(args.seed)
     out_path = args.output_dir
-    n_joints = 22 if args.dataset == 'humanml' else 21
+    n_joints = 22 if args.dataset == 'humanml' or args.dataset == 'h1'else 21
     name = os.path.basename(os.path.dirname(args.model_path))
     niter = os.path.basename(args.model_path).replace('model', '').replace('.pt', '')
     max_frames = 196 if args.dataset in ['kit', 'humanml'] else 60
-    fps = 12.5 if args.dataset == 'kit' else 20
+    fps = 12.5 if args.dataset == 'kit' else 30 if args.dataset == 'h1' else 20
     n_frames = min(max_frames, int(args.motion_length*fps)) if args.motion_length is not None else max_frames
     cfg_type = args.__dict__.get('cfg_type', 'text')
     if args.pred_len > 0 and not args.autoregressive:
@@ -80,10 +80,6 @@ def main(args=None):
             action_text = fr.readlines()
         action_text = [s.replace('\n', '') for s in action_text]
         args.num_samples = len(action_text)
-    elif args.dataset == 'h1_prefix' or getattr(args, 'context_len', 0) > 0:
-        # For prefix-conditioned models (like H1 prefix), use data-driven approach
-        print("Using prefix conditioning mode - will sample from dataset")
-        # Keep the default num_samples, will use data from dataset
 
     args.batch_size = args.num_samples  # Sampling a single batch from the testset, with exactly args.num_samples
 
@@ -142,31 +138,31 @@ def main(args=None):
     # For guidance experiments
     cond_fn = None
  
-    # if args.sampling_mode == 'goal':
-    #     target_joint_names, is_heading = sample_goal(args.num_samples, dist_util.dev(), args.target_joint_names)
-    #     target_loc = get_target_location(input_motion, data.dataset.mean_gpu, data.dataset.std_gpu, 
-    #                                         model_kwargs['y']['lengths'], data.dataset.t2m_dataset.opt.joints_num, model.all_goal_joint_names, target_joint_names, is_heading)
-    #     if args.target_joint_source == 'random':
-    #         # target location    
-    #         target_loc = torch.zeros_like(target_loc)
-    #         # is_foot, is_pelvis, is_wrist, is_traj, is_head = [is_substr_in_list(organ, target_joint_names) for organ in ['foot', 'pelvis', 'wrist', 'traj', 'head']]
-    #         mid_point_height = { 'traj': 0., 'pelvis': 0.93, 'right_wrist': 0.93, 'left_wrist': 0.93, 'head': 1.7, 'left_foot': 0.3, 'right_foot': 0.3}
+    if args.sampling_mode == 'goal':
+        target_joint_names, is_heading = sample_goal(args.num_samples, dist_util.dev(), args.target_joint_names)
+        target_loc = get_target_location(input_motion, data.dataset.mean_gpu, data.dataset.std_gpu, 
+                                            model_kwargs['y']['lengths'], data.dataset.t2m_dataset.opt.joints_num, model.all_goal_joint_names, target_joint_names, is_heading)
+        if args.target_joint_source == 'random':
+            # target location    
+            target_loc = torch.zeros_like(target_loc)
+            # is_foot, is_pelvis, is_wrist, is_traj, is_head = [is_substr_in_list(organ, target_joint_names) for organ in ['foot', 'pelvis', 'wrist', 'traj', 'head']]
+            mid_point_height = { 'traj': 0., 'pelvis': 0.93, 'right_wrist': 0.93, 'left_wrist': 0.93, 'head': 1.7, 'left_foot': 0.3, 'right_foot': 0.3}
             
-    #         all_joint_names = model.all_goal_joint_names + ['traj', 'heading']
-    #         for sample_i, joint_list in enumerate(target_joint_names):
-    #             if is_heading[sample_i]:
-    #                 target_loc[sample_i, all_joint_names.index('heading'), 0] = (2 * torch.pi * torch.rand([1], dtype=target_loc.dtype, device=target_loc.device) - torch.pi)
-    #             for j in joint_list:
-    #                 mid_point = torch.zeros([3], dtype=target_loc.dtype, device=target_loc.device)
-    #                 mid_point[1] = mid_point_height[j]
-    #                 radius = torch.ones([3], dtype=target_loc.dtype, device=target_loc.device)
-    #                 radius[1] = 0.3
-    #                 target_loc[sample_i, all_joint_names.index(j)] = mid_point + 2 * radius * torch.rand_like(mid_point) - radius
-    #         target_loc[:, -2, 1] = 0   # zero the y axis for the trajectory
+            all_joint_names = model.all_goal_joint_names + ['traj', 'heading']
+            for sample_i, joint_list in enumerate(target_joint_names):
+                if is_heading[sample_i]:
+                    target_loc[sample_i, all_joint_names.index('heading'), 0] = (2 * torch.pi * torch.rand([1], dtype=target_loc.dtype, device=target_loc.device) - torch.pi)
+                for j in joint_list:
+                    mid_point = torch.zeros([3], dtype=target_loc.dtype, device=target_loc.device)
+                    mid_point[1] = mid_point_height[j]
+                    radius = torch.ones([3], dtype=target_loc.dtype, device=target_loc.device)
+                    radius[1] = 0.3
+                    target_loc[sample_i, all_joint_names.index(j)] = mid_point + 2 * radius * torch.rand_like(mid_point) - radius
+            target_loc[:, -2, 1] = 0   # zero the y axis for the trajectory
 
-    #     model_kwargs['y']['target_cond'] = target_loc
-    #     model_kwargs['y']['target_joint_names'] = target_joint_names
-    #     model_kwargs['y']['is_heading'] = is_heading
+        model_kwargs['y']['target_cond'] = target_loc
+        model_kwargs['y']['target_joint_names'] = target_joint_names
+        model_kwargs['y']['is_heading'] = is_heading
             
     if args.use_inpainting:
         raise NotImplementedError()
@@ -187,9 +183,9 @@ def main(args=None):
         if args.guidance_param != 1:
             model_kwargs['y']['scale'] = torch.ones(args.batch_size, device=dist_util.dev()) * args.guidance_param
         
-        # if 'text' in model_kwargs['y'].keys():
-        #     # encoding once instead of each iteration saves lots of time
-        #     model_kwargs['y']['text_embed'] = model.encode_text(model_kwargs['y']['text'])
+        if 'text' in model_kwargs['y'].keys():
+            # encoding once instead of each iteration saves lots of time
+            model_kwargs['y']['text_embed'] = model.encode_text(model_kwargs['y']['text'])
 
         sample = sample_fn(
             model,
@@ -206,16 +202,23 @@ def main(args=None):
             cond_fn=cond_fn,
         )
         
+
+        if args.multi_target_cond:
+            prefix_end_heading = get_target_location(sample[..., :args.context_len], data.dataset.mean_gpu, data.dataset.std_gpu, 
+                                                    torch.tensor([args.context_len] * args.num_samples), 
+                                                    data.dataset.t2m_dataset.opt.joints_num, model.all_goal_joint_names,
+                                                    model_kwargs['y']['target_joint_names'], is_heading=model_kwargs['y']['is_heading'])[:, -1, 0]
+            model_kwargs['y']['heading_cond'] = prefix_end_heading + model_kwargs['y']['target_cond'][:, -1, 0]
+            model_kwargs['y']['heading_pred_cond'] = get_target_location(sample, data.dataset.mean_gpu, data.dataset.std_gpu, 
+                                                    torch.tensor([sample.shape[-1]] * args.num_samples), 
+                                                    data.dataset.t2m_dataset.opt.joints_num, model.all_goal_joint_names,
+                                                    model_kwargs['y']['target_joint_names'], is_heading=model_kwargs['y']['is_heading'])[:, -1, 0]
+     
+        
         if model.data_rep == 'hml_vec':
-            sample = data.dataset.dataset.inv_transform(sample.cpu().permute(0, 2, 3, 1)).float()
+            sample = data.dataset.t2m_dataset.inv_transform(sample.cpu().permute(0, 2, 3, 1)).float()
             sample = recover_from_ric(sample, n_joints, args.hml_type,)
             sample = sample.view(-1, *sample.shape[2:]).permute(0, 2, 3, 1)
-        elif model.data_rep == 'rot6d':
-            # For H1 prefix data with rot6d representation, just denormalize
-            sample = data.dataset.dataset.inv_transform(sample.cpu().permute(0, 2, 3, 1)).float()
-            # sample is already in the correct format: (batch, joints, features, frames)
-            # Permute to (batch, frames, joints, features) for visualization compatibility
-            sample = sample.permute(0, 3, 1, 2)
 
         heading_all = recover_root_rot_heading_ang(sample)
         heading_all *= 180 / torch.pi
@@ -224,8 +227,8 @@ def main(args=None):
         if args.unconstrained:
             all_text += ['unconstrained'] * args.num_samples
         else:
-            # For prefix-only models, use a generic description since no text/action data exists
-            all_text += [f'prefix_sample_{i}' for i in range(args.num_samples)]
+            text_key = 'text' if 'text' in model_kwargs['y'] else 'action_text'
+            all_text += model_kwargs['y'][text_key]
 
         all_motions.append(sample.cpu().numpy())
         _len = model_kwargs['y']['lengths'].cpu().numpy()
@@ -256,7 +259,7 @@ def main(args=None):
         fw.write('\n'.join([str(l) for l in all_lengths]))
 
     print(f"saving visualizations to [{out_path}]...")
-    skeleton = paramUtil.kit_kinematic_chain if args.dataset in ['kit', 'h1_prefix'] else paramUtil.t2m_kinematic_chain
+    skeleton = paramUtil.kit_kinematic_chain if args.dataset == 'kit' else paramUtil.t2m_kinematic_chain
 
     sample_print_template, row_print_template, all_print_template, \
     sample_file_template, row_file_template, all_file_template = construct_template_variables(args.unconstrained)

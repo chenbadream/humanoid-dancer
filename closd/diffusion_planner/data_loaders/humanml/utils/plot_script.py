@@ -95,8 +95,8 @@ def plot_3d_motion(save_path, kinematic_tree, joints, title, dataset, figsize=(3
         scale = 1.3  # scale for visualization
     elif dataset in ['humanact12', 'uestc']:
         scale = -1.5 # reverse axes, scale for visualization
-    else:
-        scale = 1.0  # default scale for other datasets (including h1_prefix)
+    elif dataset == 'h1':
+        scale = 1.0
     data *= scale
 
     fig = plt.figure(figsize=figsize)

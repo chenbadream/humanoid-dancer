@@ -235,9 +235,6 @@ class TrainLoop:
                 
                 self.cond_modifiers(cond['y'], motion) # Modify in-place for efficiency
                 motion = motion.to(self.device)
-                for key, val in cond['y'].items():
-                    print("key: ", key)
-                print(type(cond['y']))
                 cond['y'] = {key: val.to(self.device) if torch.is_tensor(val) else val for key, val in cond['y'].items()}
 
                 self.run_step(motion, cond)

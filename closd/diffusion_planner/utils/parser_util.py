@@ -3,7 +3,7 @@ import argparse
 import os
 import json
 from closd.diffusion_planner.data_loaders.humanml_utils import HML_EE_JOINT_NAMES
-# from closd.utils import hf_handler  # Commented out for now
+from closd.utils import hf_handler
 
 def parse_and_load_from_model(parser):
     # args according to the loaded model
@@ -28,7 +28,7 @@ def parse_and_load_from_model(parser):
 def load_args_from_model(args, args_to_overwrite):
     model_path = get_model_path_from_args()
     args_path = os.path.join(os.path.dirname(model_path), 'args.json')
-    # hf_handler.get_dependencies()  # Commented out for now
+    hf_handler.get_dependencies()
     assert os.path.exists(args_path), 'Arguments json file was not found!'
     with open(args_path, 'r') as fr:
         model_args = json.load(fr)
@@ -158,7 +158,7 @@ def add_model_options(parser):
 
 def add_data_options(parser):
     group = parser.add_argument_group('dataset')
-    group.add_argument("--dataset", default='humanml', choices=['humanml', 'kit', 'humanact12', 'uestc', 'h1_prefix'], type=str,
+    group.add_argument("--dataset", default='humanml', choices=['humanml', 'kit', 'humanact12', 'uestc', 'h1'], type=str,
                        help="Dataset name (choose from list).")
     group.add_argument("--data_dir", default="", type=str,
                        help="If empty, will use defaults according to the specified dataset.")
@@ -305,10 +305,8 @@ def add_evaluation_options(parser):
 def get_cond_mode(args):
     if args.unconstrained:
         cond_mode = 'no_cond'
-    elif args.dataset in ['kit', 'humanml']:
+    elif args.dataset in ['kit', 'humanml', 'h1']:
         cond_mode = 'text'
-    elif args.dataset == 'h1_prefix':
-        cond_mode = 'no_cond'  # H1 prefix uses no text/action conditioning
     else:
         cond_mode = 'action'
     return cond_mode
@@ -355,13 +353,4 @@ def evaluation_parser():
     # args specified by the user: (all other will be loaded from the model)
     add_base_options(parser)
     add_evaluation_options(parser)
-    return parse_and_load_from_model(parser)
-
-def generate_prefix_args():
-    """Parse arguments for prefix-conditioned model generation."""
-    parser = ArgumentParser()
-    # args specified by the user: (all other will be loaded from the model)
-    add_base_options(parser)
-    add_sampling_options(parser)
-    # No text/action generation options needed for prefix models
     return parse_and_load_from_model(parser)

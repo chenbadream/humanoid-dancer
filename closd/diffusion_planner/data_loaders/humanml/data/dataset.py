@@ -230,7 +230,8 @@ class Text2MotionDatasetV2(data.Dataset):
         if self.opt.hml_type is not None:
             _name = f'_{self.opt.hml_type}'
         # cache_path = os.path.join(opt.meta_dir, self.opt.dataset_name + '_' + _split + _name + '.npy')
-        cache_path = os.path.join(opt.cache_dir, 'data', 'humanml3d', self.opt.dataset_name + '_' + _split + _name + '.npy')
+        # cache_path = os.path.join(opt.cache_dir, 'data', 'humanml3d', self.opt.dataset_name + '_' + _split + _name + '.npy')
+        cache_path = "h1_dataset/data/h1/h1_train.npy"
         if opt.use_cache and os.path.exists(cache_path):
             print(f'Loading motions from cache file [{cache_path}]...')
             _cache = np.load(cache_path, allow_pickle=True)[None][0]
@@ -389,9 +390,25 @@ class Text2MotionDatasetV2(data.Dataset):
                 m_length = (m_length // self.opt.unit_length - 1) * self.opt.unit_length
             elif coin2 == 'single':
                 m_length = (m_length // self.opt.unit_length) * self.opt.unit_length
-        idx = random.randint(0, len(motion) - m_length)
+        
+        # Ensure m_length doesn't exceed motion length
+        if m_length > len(motion):
+            m_length = len(motion)
+        
+        # Calculate valid range for idx
+        max_idx = len(motion) - m_length
+        if max_idx < 0:
+            idx = 0
+            m_length = len(motion)
+        else:
+            idx = random.randint(0, max_idx)
+            
         if self.opt.disable_offset_aug:
-            idx = random.randint(0, self.opt.unit_length)
+            max_offset = min(self.opt.unit_length, len(motion) - m_length)
+            if max_offset > 0:
+                idx = random.randint(0, max_offset)
+            else:
+                idx = 0
         motion = motion[idx:idx+m_length]
         # TODO - consider puting the first frame at the origin in the 'global_root' case
 
@@ -863,3 +880,9 @@ class HumanML3D(data.Dataset):
 class KIT(HumanML3D):
     def __init__(self, mode, datapath='./dataset/kit_opt.txt', split="train", **kwargs):
         super(KIT, self).__init__(mode, datapath, split, **kwargs)
+
+
+# A wrapper class for H1 humanoid dataset for MDM purposes
+class H1(HumanML3D):
+    def __init__(self, mode, datapath='dataset/h1_opt.txt', split="train", **kwargs):
+        super(H1, self).__init__(mode, datapath, split, **kwargs)
