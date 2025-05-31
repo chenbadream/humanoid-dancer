@@ -37,7 +37,7 @@ def play(args: Args):
 
     # prepare environment
     env, _ = task_registry.make_env(args=args, env_cfg=env_cfg)
-    obs_dim = env.num_obs
+    obs_dim = env.num_obs  # Policy observations (119-dim for H1AMP)
     obs = env.get_observations()
     
     # Check if we're using AMP algorithm and create necessary components
@@ -46,12 +46,18 @@ def play(args: Args):
     replay_buffer = None
     
     if train_cfg.runner.algorithm_class_name == 'AMP':
+        # For AMP environments, discriminator uses AMP observation dimensions, not policy observations
+        if hasattr(env, 'amp_obs_dim'):
+            amp_obs_dim = env.amp_obs_dim  # AMP observations (105-dim for H1AMP)
+        else:
+            amp_obs_dim = obs_dim  # Fallback for non-AMP environments
+            
         # Create discriminator for AMP inference (same as training)
-        discriminator = Discriminator(input_dim=obs_dim)  # AMP observations are 105-dim
+        discriminator = Discriminator(input_dim=amp_obs_dim)  # Use AMP observation dimensions
         
         # Create empty buffers for inference (not used during play but required for AMP initialization)
-        demo_buffer = DemoBuffer(torch.zeros(1, obs_dim))  # Dummy data
-        replay_buffer = ReplayBuffer(obs_dim, capacity=1000)  # Small capacity for inference
+        demo_buffer = DemoBuffer(torch.zeros(1, amp_obs_dim))  # Dummy data with correct dimensions
+        replay_buffer = ReplayBuffer(amp_obs_dim, capacity=1000)  # Small capacity for inference
     
     # load policy
     train_cfg.runner.resume = True

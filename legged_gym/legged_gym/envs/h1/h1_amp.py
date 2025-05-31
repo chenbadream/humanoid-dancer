@@ -46,18 +46,90 @@ class H1AMP(H1Mimic):
         self.reset_buf |= self.time_out_buf
 
     def compute_observations(self):
-        # For H1AMP, we use the AMP observations as the main observations
-        # Compute AMP observations using consecutive timesteps (DeepMimic approach)
-        self.obs_buf = self._compute_amp_observations()
-        self.amp_obs_buf = self.obs_buf.clone()
+        # For H1AMP, we separate observations for policy and discriminator:
+        # - Policy network gets 119-dimensional observations (same as H1Mimic)
+        # - Discriminator gets 105-dimensional AMP observations
         
-        # Add noise if needed
+        # Compute 119-dimensional observations for policy network (same as H1Mimic)
+        self.obs_buf = self._compute_mimic_observations()
+        
+        # Compute 105-dimensional AMP observations for discriminator 
+        self.amp_obs_buf = self._compute_amp_observations()
+        
+        # Add noise if needed (only to policy observations)
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
         
         # Update previous states for next timestep
         self._update_previous_states()
         
+    def _compute_mimic_observations(self):
+        """Compute 119-dimensional observations for policy network (same as H1Mimic)"""
+        offset = self.env_origins
+        B = self.motion_ids.shape[0]
+        if self.cfg.motion.sync:
+            motion_times = torch.tensor([self._hack_motion_time] * B, dtype=torch.float32, device=self.device).view(-1)
+        else:
+            motion_times = (self.episode_length_buf + 1) * self.dt + self.motion_start_times # next frames so +1
+        motion_res = self._get_state_from_motionlib_cache_trimesh(self.motion_ids, motion_times, offset=offset)
+        
+        ref_body_pos = motion_res["rg_pos"] 
+        ref_body_pos_extend = motion_res["rg_pos_t"]
+        ref_body_vel_subset = motion_res["body_vel"] # [num_envs, num_markers, 3]
+        ref_body_vel = ref_body_vel_subset
+        ref_body_vel_extend = motion_res["body_vel_t"] # [num_envs, num_markers, 3]
+        ref_body_rot = motion_res["rb_rot"] # [num_envs, num_markers, 4]
+        ref_body_rot_extend = motion_res["rg_rot_t"] # [num_envs, num_markers, 4]
+        ref_body_ang_vel = motion_res["body_ang_vel"] # [num_envs, num_markers, 3]
+        ref_body_ang_vel_extend = motion_res["body_ang_vel_t"] # [num_envs, num_markers, 3]
+        ref_dof_pos = motion_res["dof_pos"] # [num_envs, num_dofs]
+        ref_dof_vel = motion_res["dof_vel"] # [num_envs, num_dofs]
+        
+        self.marker_coords[:] = ref_body_pos_extend.reshape(B, -1, 3)
+        
+        ref_root_vel = ref_body_vel[:, 0] # [num_envs, 3]
+        ref_root_ang_vel = ref_body_ang_vel[:, 0]
+        
+        root_rot = self.base_quat
+        root_vel = self.base_lin_vel
+        root_ang_vel = self.base_ang_vel
+    
+        heading_inv_rot = torch_utils.calc_heading_quat_inv(root_rot)
+        heading_rot = torch_utils.calc_heading_quat(root_rot)
+        
+        diff_global_body_rot = torch_utils.quat_mul(ref_body_rot[:, 0], torch_utils.quat_conjugate(root_rot))
+        diff_local_body_rot_flat = torch_utils.quat_mul(torch_utils.quat_mul(heading_inv_rot.view(-1, 4), diff_global_body_rot.view(-1, 4)), heading_rot.view(-1, 4))
+        
+        diff_global_root_vel = ref_root_vel.view(B, 1, 3) - root_vel.view(B, 1, 3)
+        diff_local_root_vel = torch_utils.my_quat_rotate(heading_inv_rot.view(-1, 4), diff_global_root_vel.view(-1, 3))
+        
+        diff_global_root_ang_vel = ref_root_ang_vel.view(B, 1, 3) - root_ang_vel.view(B, 1, 3)
+        diff_local_root_ang_vel = torch_utils.my_quat_rotate(heading_inv_rot.view(-1, 4), diff_global_root_ang_vel.view(-1, 3))
+        
+        dof_diff = ref_dof_pos.view(B, 1, -1) - self.dof_pos.view(B, 1, -1)
+        dof_vel_diff = ref_dof_vel.view(B, 1, -1) - self.dof_vel.view(B, 1, -1)
+
+        # Build 119-dimensional observation same as H1Mimic
+        mimic_obs = torch.cat((  
+                                    # self obs (3 + 3 + 3 + 19 + 19 + 19 + 3 = 69)
+                                    self.base_ang_vel  * self.obs_scales.ang_vel,
+                                    self.projected_gravity,
+                                    self.commands[:, :3] * self.commands_scale * 0, # do not use commands
+                                    (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
+                                    self.dof_vel * self.obs_scales.dof_vel,
+                                    self.actions,
+                                    self.base_lin_vel * self.obs_scales.lin_vel,
+                                    
+                                    # task obs (6 + 3 + 3 + 19 + 19 = 50)
+                                    torch_utils.quat_to_tan_norm(diff_local_body_rot_flat).view(B, -1),
+                                    diff_local_root_vel.view(B, -1) * self.obs_scales.lin_vel,
+                                    diff_local_root_ang_vel.view(B, -1) * self.obs_scales.ang_vel,
+                                    dof_diff.view(B, -1) * self.obs_scales.dof_pos,
+                                    dof_vel_diff.view(B, -1) * self.obs_scales.dof_vel,
+                                    ),dim=-1)
+        
+        return mimic_obs
+
     def _compute_amp_observations(self):
         """Compute 105-dimensional AMP observations for discriminator using consecutive timesteps"""
         B = self.num_envs
@@ -388,8 +460,9 @@ class H1AMP(H1Mimic):
         self.disc_rewards = disc_rewards.to(self.device)
 
     def _get_noise_scale_vec(self, cfg):
-        """ Sets a vector used to scale the noise added to the AMP observations.
-            [NOTE]: Must be adapted when changing the AMP observations structure
+        """ Sets a vector used to scale the noise added to the policy observations.
+            [NOTE]: Since we now use 119-dimensional observations for policy (same as H1Mimic),
+            we can use the parent class (H1Robot) noise scale vector method.
 
         Args:
             cfg (Dict): Environment config file
@@ -397,41 +470,5 @@ class H1AMP(H1Mimic):
         Returns:
             [torch.Tensor]: Vector of scales used to multiply a uniform distribution in [-1, 1]
         """
-        # Create noise vector with AMP observation dimensions (105)
-        noise_vec = torch.zeros(self.amp_obs_dim, dtype=torch.float, device=self.device, requires_grad=False)
-        self.add_noise = self.cfg.noise.add_noise
-        noise_scales = self.cfg.noise.noise_scales
-        noise_level = self.cfg.noise.noise_level
-        
-        # AMP observation structure (105 dims):
-        # Current pose: height(1) + rotation(6) + joints(19) = 26
-        # Previous pose: height(1) + rotation(6) + joints(19) = 26  
-        # Current velocity: lin_vel(3) + ang_vel(3) + joint_vel(19) = 25
-        # Previous velocity: lin_vel(3) + ang_vel(3) + joint_vel(19) = 25
-        # Gravity: (3)
-        # Total: 26 + 26 + 25 + 25 + 3 = 105
-        
-        # Current pose
-        noise_vec[0:1] = 0.0  # root height - no noise
-        noise_vec[1:7] = 0.0  # root rotation (6D) - no noise  
-        noise_vec[7:26] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos  # joint positions (19)
-        
-        # Previous pose  
-        noise_vec[26:27] = 0.0  # prev root height - no noise
-        noise_vec[27:33] = 0.0  # prev root rotation (6D) - no noise
-        noise_vec[33:52] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos  # prev joint positions (19)
-        
-        # Current velocity
-        noise_vec[52:55] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel  # root linear velocity (3)
-        noise_vec[55:58] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel  # root angular velocity (3)
-        noise_vec[58:77] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel  # joint velocities (19)
-        
-        # Previous velocity
-        noise_vec[77:80] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel  # prev root linear velocity (3)
-        noise_vec[80:83] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel  # prev root angular velocity (3)
-        noise_vec[83:102] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel  # prev joint velocities (19)
-        
-        # Gravity
-        noise_vec[102:105] = noise_scales.gravity * noise_level  # gravity (3)
-        
-        return noise_vec
+        # Use H1Robot's noise scale vector since policy observations are same as H1Mimic (119-dim)
+        return super()._get_noise_scale_vec(cfg)
