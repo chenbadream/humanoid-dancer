@@ -80,6 +80,10 @@ def main(args=None):
             action_text = fr.readlines()
         action_text = [s.replace('\n', '') for s in action_text]
         args.num_samples = len(action_text)
+    elif args.dataset == 'h1_prefix' or getattr(args, 'context_len', 0) > 0:
+        # For prefix-conditioned models (like H1 prefix), use data-driven approach
+        print("Using prefix conditioning mode - will sample from dataset")
+        # Keep the default num_samples, will use data from dataset
 
     args.batch_size = args.num_samples  # Sampling a single batch from the testset, with exactly args.num_samples
 
@@ -202,23 +206,16 @@ def main(args=None):
             cond_fn=cond_fn,
         )
         
-
-        if args.multi_target_cond:
-            prefix_end_heading = get_target_location(sample[..., :args.context_len], data.dataset.mean_gpu, data.dataset.std_gpu, 
-                                                    torch.tensor([args.context_len] * args.num_samples), 
-                                                    data.dataset.t2m_dataset.opt.joints_num, model.all_goal_joint_names,
-                                                    model_kwargs['y']['target_joint_names'], is_heading=model_kwargs['y']['is_heading'])[:, -1, 0]
-            model_kwargs['y']['heading_cond'] = prefix_end_heading + model_kwargs['y']['target_cond'][:, -1, 0]
-            model_kwargs['y']['heading_pred_cond'] = get_target_location(sample, data.dataset.mean_gpu, data.dataset.std_gpu, 
-                                                    torch.tensor([sample.shape[-1]] * args.num_samples), 
-                                                    data.dataset.t2m_dataset.opt.joints_num, model.all_goal_joint_names,
-                                                    model_kwargs['y']['target_joint_names'], is_heading=model_kwargs['y']['is_heading'])[:, -1, 0]
-     
-        
         if model.data_rep == 'hml_vec':
-            sample = data.dataset.t2m_dataset.inv_transform(sample.cpu().permute(0, 2, 3, 1)).float()
+            sample = data.dataset.dataset.inv_transform(sample.cpu().permute(0, 2, 3, 1)).float()
             sample = recover_from_ric(sample, n_joints, args.hml_type,)
             sample = sample.view(-1, *sample.shape[2:]).permute(0, 2, 3, 1)
+        elif model.data_rep == 'rot6d':
+            # For H1 prefix data with rot6d representation, just denormalize
+            sample = data.dataset.dataset.inv_transform(sample.cpu().permute(0, 2, 3, 1)).float()
+            # sample is already in the correct format: (batch, joints, features, frames)
+            # Permute to (batch, frames, joints, features) for visualization compatibility
+            sample = sample.permute(0, 3, 1, 2)
 
         heading_all = recover_root_rot_heading_ang(sample)
         heading_all *= 180 / torch.pi
@@ -227,8 +224,8 @@ def main(args=None):
         if args.unconstrained:
             all_text += ['unconstrained'] * args.num_samples
         else:
-            text_key = 'text' if 'text' in model_kwargs['y'] else 'action_text'
-            all_text += model_kwargs['y'][text_key]
+            # For prefix-only models, use a generic description since no text/action data exists
+            all_text += [f'prefix_sample_{i}' for i in range(args.num_samples)]
 
         all_motions.append(sample.cpu().numpy())
         _len = model_kwargs['y']['lengths'].cpu().numpy()
@@ -259,7 +256,7 @@ def main(args=None):
         fw.write('\n'.join([str(l) for l in all_lengths]))
 
     print(f"saving visualizations to [{out_path}]...")
-    skeleton = paramUtil.kit_kinematic_chain if args.dataset == 'kit' else paramUtil.t2m_kinematic_chain
+    skeleton = paramUtil.kit_kinematic_chain if args.dataset in ['kit', 'h1_prefix'] else paramUtil.t2m_kinematic_chain
 
     sample_print_template, row_print_template, all_print_template, \
     sample_file_template, row_file_template, all_file_template = construct_template_variables(args.unconstrained)

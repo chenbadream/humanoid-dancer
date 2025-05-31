@@ -130,3 +130,7 @@ venv.bak/
 .pyre/
 
 logs
+
+save
+
+h1_prefix

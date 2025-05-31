@@ -37,6 +37,7 @@ def play(args: Args):
 
     # prepare environment
     env, _ = task_registry.make_env(args=args, env_cfg=env_cfg)
+    obs_dim = env.num_obs
     obs = env.get_observations()
     
     # Check if we're using AMP algorithm and create necessary components
@@ -46,11 +47,11 @@ def play(args: Args):
     
     if train_cfg.runner.algorithm_class_name == 'AMP':
         # Create discriminator for AMP inference (same as training)
-        discriminator = Discriminator(input_dim=119)  # AMP observations are 119-dim
+        discriminator = Discriminator(input_dim=obs_dim)  # AMP observations are 105-dim
         
         # Create empty buffers for inference (not used during play but required for AMP initialization)
-        demo_buffer = DemoBuffer(torch.zeros(1, 119))  # Dummy data
-        replay_buffer = ReplayBuffer(119, capacity=1000)  # Small capacity for inference
+        demo_buffer = DemoBuffer(torch.zeros(1, obs_dim))  # Dummy data
+        replay_buffer = ReplayBuffer(obs_dim, capacity=1000)  # Small capacity for inference
     
     # load policy
     train_cfg.runner.resume = True

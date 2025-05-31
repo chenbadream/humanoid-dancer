@@ -49,6 +49,11 @@ def get_model_args(args, data):
         data_rep = 'hml_vec'
         njoints = 251
         nfeats = 1
+    elif args.dataset == 'h1_prefix':
+        data_rep = 'rot6d'  # Use rotation 6d representation for H1 prefix
+        njoints = 21        # H1 has 21 joints
+        nfeats = 3          # 3 features per joint (xyz)
+        all_goal_joint_names = []  # No goal joint names for H1 prefix
 
     # Compatibility with old models
     if not hasattr(args, 'pred_len'):
