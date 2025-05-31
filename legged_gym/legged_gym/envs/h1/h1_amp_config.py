@@ -52,8 +52,15 @@ class Env(h1_config.Env):
 @dataclass
 class Rewards(MimicRewards):
     only_positive_rewards: bool = False
-    # AMP-specific parameters
-    task_reward_lerp: float = 0.5  # Balanced between task and discriminator rewards
+    # AMP-specific parameters - prioritize accuracy first
+    task_reward_lerp: float = 0.95  # Increased to 95% task, 5% discriminator for better accuracy
+    
+    # Tighter tracking tolerances for better accuracy
+    tracking_joint_pos_sigma: float = 0.25  # Even tighter for better accuracy
+    tracking_joint_vel_sigma: float = 6     # Tighter velocity tracking
+    tracking_body_rot_sigma: float = 0.06   # Tighter rotation tracking
+    tracking_body_vel_sigma: float = 6      # Tighter velocity tracking
+    tracking_body_ang_vel_sigma: float = 6  # Tighter angular velocity tracking
     
     # Override scales to add AMP-specific reward term
     scales: Dict[str, float] = field(default_factory=lambda: {
@@ -75,13 +82,14 @@ class Rewards(MimicRewards):
         'orientation': -100.0,  # Reduced penalty
         'alive': 2.0,  # Increased positive reward
         'feet_max_height_for_this_air': -1250,  # Reduced penalty
-        'tracking_selected_joint_position': 32 * 6,  # Keep high positive reward
-        'tracking_selected_joint_vel': 16,  # Keep positive reward
-        'tracking_root_rotation': 20.0,  # Keep positive reward
-        'tracking_root_vel': 8.0 * 6,  # Keep positive reward
-        'tracking_root_ang_vel': 8.0 * 6,  # Keep positive reward
-        # AMP-specific reward term (from discriminator)
-        'amp': 5.0,  # Increased to give more weight to discriminator rewards
+        # Boost motion tracking rewards significantly for better accuracy
+        'tracking_selected_joint_position': 32 * 10,  # Increased from 32*8 to 32*10 for even stronger tracking
+        'tracking_selected_joint_vel': 25,  # Increased from 20 to 25
+        'tracking_root_rotation': 30.0,  # Increased from 25.0 to 30.0
+        'tracking_root_vel': 8.0 * 10,  # Increased from 8.0*8 to 8.0*10
+        'tracking_root_ang_vel': 8.0 * 10,  # Increased from 8.0*8 to 8.0*10
+        # AMP-specific reward term (from discriminator) - minimal for accuracy first
+        'amp': 0.1,  # Further reduced from 0.5 to 0.1 to strongly prioritize motion tracking
     })
 
 @dataclass
